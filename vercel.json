@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server/index.js",
+      "use": "@vercel/node",
+      "config": {
+        "installCommand": "cd server && npm install"
+      }
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/server/index.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "env": {
+    "MONGODB_URI": "mongodb+srv://aditkatiyar101:katiyar1972@cluster0.bhjbsnd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+    "REACT_APP_API_URL": "/api"
+  },
+  "build": {
+    "env": {
+      "CI": "false",
+      "GENERATE_SOURCEMAP": "false"
+    }
+  }
+} 
