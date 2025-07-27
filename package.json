@@ -35,7 +35,9 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "server": "node server/index.js",
-    "dev:full": "concurrently \"npm run server\" \"npm run start\""
+    "dev:full": "concurrently \"npm run server\" \"npm run start\"",
+    "build:full": "npm run build && cd server && npm install",
+    "start:prod": "node server/index.js"
   },
   "eslintConfig": {
     "extends": [

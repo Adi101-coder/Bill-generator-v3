@@ -5,6 +5,16 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Test endpoint to verify API is working
+router.get('/test', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Bills API is working',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  });
+});
+
 // Check disk space
 router.get('/disk-space', async (req, res) => {
   try {
@@ -107,7 +117,31 @@ router.get('/:id', async (req, res) => {
 // Create new bill
 router.post('/', async (req, res) => {
   try {
+    console.log('Received bill data:', JSON.stringify(req.body, null, 2));
+    
     const billData = req.body;
+    
+    // Validate required fields
+    if (!billData.invoiceNumber) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invoice number is required' 
+      });
+    }
+    
+    if (!billData.customerName) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Customer name is required' 
+      });
+    }
+    
+    if (!billData.assetCost) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Asset cost is required' 
+      });
+    }
     
     // Clean and validate data before saving
     const cleanedData = {
@@ -118,7 +152,7 @@ router.post('/', async (req, res) => {
       assetCategory: billData.assetCategory || 'Electronics',
       model: billData.model || 'Unknown Model',
       imeiSerialNumber: billData.imeiSerialNumber || '',
-      assetCost: billData.assetCost || 0,
+      assetCost: parseFloat(billData.assetCost) || 0,
       hdbFinance: billData.hdbFinance || false
     };
 
@@ -142,6 +176,8 @@ router.post('/', async (req, res) => {
       }
     }
     
+    console.log('Cleaned bill data:', JSON.stringify(cleanedData, null, 2));
+    
     // Check if invoice number already exists
     const existingBill = await Bill.findOne({ invoiceNumber: cleanedData.invoiceNumber });
     if (existingBill) {
@@ -152,12 +188,19 @@ router.post('/', async (req, res) => {
     }
 
     const bill = new Bill(cleanedData);
+    console.log('Saving bill to database...');
     await bill.save();
+    console.log('Bill saved successfully:', bill._id);
     
     res.status(201).json({ success: true, data: bill });
   } catch (error) {
     console.error('Error creating bill:', error);
-    res.status(500).json({ success: false, message: 'Error creating bill' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error creating bill',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 });
 

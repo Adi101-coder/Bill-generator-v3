@@ -28,12 +28,18 @@
   ],
   "env": {
     "MONGODB_URI": "mongodb+srv://aditkatiyar101:katiyar1972@cluster0.bhjbsnd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
-    "REACT_APP_API_URL": "/api"
+    "REACT_APP_API_URL": "/api",
+    "NODE_ENV": "production"
   },
   "build": {
     "env": {
       "CI": "false",
       "GENERATE_SOURCEMAP": "false"
+    }
+  },
+  "functions": {
+    "server/index.js": {
+      "maxDuration": 30
     }
   }
 } 

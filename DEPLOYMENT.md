@@ -1,64 +1,110 @@
-# Vercel Deployment Guide
+# Deployment Guide
 
-## Prerequisites
-1. Install Vercel CLI: `npm i -g vercel`
-2. Have a Vercel account (sign up at vercel.com)
-3. MongoDB Atlas cluster configured
+## Local Development
 
-## Deployment Steps
-
-### 1. Install Vercel CLI
+1. Install dependencies:
 ```bash
-npm i -g vercel
+npm install
+cd server && npm install
 ```
 
-### 2. Login to Vercel
+2. Start the development server:
 ```bash
-vercel login
+npm run dev:full
 ```
 
-### 3. Deploy to Vercel
+This will start both the React frontend (port 3000) and the Express backend (port 5000).
+
+## Production Deployment (Vercel)
+
+### Prerequisites
+- Vercel account
+- MongoDB Atlas database
+- Environment variables configured
+
+### Environment Variables
+Make sure these are set in your Vercel project:
+- `MONGODB_URI`: Your MongoDB connection string
+- `REACT_APP_API_URL`: Set to `/api` for production
+- `NODE_ENV`: Set to `production`
+
+### Deployment Steps
+
+1. **Build the project:**
 ```bash
-vercel
+npm run build:full
 ```
 
-### 4. Follow the prompts:
-- Set up and deploy: `Y`
-- Which scope: Select your account
-- Link to existing project: `N`
-- Project name: `bill-generator` (or your preferred name)
-- Directory: `./` (current directory)
-- Override settings: `N`
-
-### 5. Set Environment Variables
-After deployment, go to your Vercel dashboard and set these environment variables:
-
-**Production Environment:**
-- `MONGODB_URI`: `mongodb+srv://aditkatiyar101:katiyar1972@cluster0.bhjbsnd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`
-- `REACT_APP_API_URL`: `/api`
-
-### 6. Redeploy
+2. **Deploy to Vercel:**
 ```bash
 vercel --prod
 ```
 
-## Project Structure for Vercel
-- `vercel.json`: Configuration file for routing and builds
-- `server/index.js`: Backend API server
-- `src/`: React frontend
-- `package.json`: Build scripts
+### Troubleshooting API Issues
 
-## API Endpoints
-After deployment, your API will be available at:
-- `https://your-domain.vercel.app/api/bills`
-- `https://your-domain.vercel.app/api/health`
+If you're getting 404 or 500 errors with the API:
 
-## Troubleshooting
-1. If API calls fail, check that `REACT_APP_API_URL` is set to `/api`
-2. If MongoDB connection fails, verify the connection string
-3. Check Vercel function logs for any errors
+1. **Check API connectivity:**
+   - Visit `/api/health` in your browser
+   - Check browser console for API test results
 
-## Local Development
-For local development, the app will use:
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:5000/api` 
+2. **Verify environment variables:**
+   - Ensure `MONGODB_URI` is correctly set
+   - Ensure `REACT_APP_API_URL` is set to `/api`
+
+3. **Check Vercel logs:**
+   - Go to your Vercel dashboard
+   - Check the Function logs for any errors
+
+4. **Test API endpoints:**
+   - `/api/health` - Should return server status
+   - `/api/bills/test` - Should return API test response
+   - `/api/bills` - Should return bills list
+
+### Common Issues
+
+1. **404 Error on API calls:**
+   - Check that `vercel.json` has correct rewrites
+   - Ensure server is properly exported in `server/index.js`
+
+2. **500 Error on API calls:**
+   - Check MongoDB connection
+   - Verify all required environment variables
+   - Check server logs for detailed error messages
+
+3. **CORS Issues:**
+   - CORS is configured to allow all origins in production
+   - Check browser console for CORS errors
+
+### Debugging Steps
+
+1. **Add console logs to track API calls:**
+   - Check browser console for API_BASE_URL
+   - Monitor network tab for failed requests
+
+2. **Test API endpoints manually:**
+   - Use browser to visit `/api/health`
+   - Use Postman or curl to test POST requests
+
+3. **Check database connection:**
+   - Verify MongoDB Atlas is accessible
+   - Check if database user has correct permissions
+
+### Environment Configuration
+
+For production, ensure these environment variables are set:
+
+```env
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database
+REACT_APP_API_URL=/api
+NODE_ENV=production
+```
+
+### API Endpoints
+
+- `GET /api/health` - Server health check
+- `GET /api/bills/test` - API test endpoint
+- `GET /api/bills` - Get all bills
+- `POST /api/bills` - Create new bill
+- `PUT /api/bills/:id` - Update bill
+- `DELETE /api/bills/:id` - Delete bill 

@@ -13,6 +13,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.j
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 console.log('API_BASE_URL:', API_BASE_URL);
 console.log('Environment:', process.env.NODE_ENV);
+console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
 
 // Admin Login Component
 const AdminLogin = ({ onLogin }) => {
@@ -102,6 +103,24 @@ const BillGenerator = () => {
   const [manualSerial, setManualSerial] = useState('');
   const [appliedSerial, setAppliedSerial] = useState('');
   const [isSerialUpdated, setIsSerialUpdated] = useState(false);
+
+  const testAPI = async () => {
+    try {
+      console.log('Testing API connectivity...');
+      const response = await fetch(`${API_BASE_URL}/health`);
+      const data = await response.json();
+      console.log('API test response:', data);
+      return data.success;
+    } catch (error) {
+      console.error('API test failed:', error);
+      return false;
+    }
+  };
+
+  // Test API on component mount
+  React.useEffect(() => {
+    testAPI();
+  }, []);
 
   const numberToWords = (amount) => {
     const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
