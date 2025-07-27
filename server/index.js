@@ -5,14 +5,16 @@ require('dotenv').config();
 
 const connectDB = require('./config/database');
 const billRoutes = require('./routes/bills');
+const mongoose = require('mongoose'); // Added for mongoose.connection.readyState
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Log environment variables (without sensitive data)
-console.log('Environment:', process.env.NODE_ENV);
+console.log('Environment:', process.env.NODE_ENV || 'development');
 console.log('Port:', PORT);
 console.log('MongoDB URI configured:', !!process.env.MONGODB_URI);
+console.log('MongoDB URI length:', process.env.MONGODB_URI ? process.env.MONGODB_URI.length : 0);
 
 // Connect to MongoDB with better error handling
 const startServer = async () => {
@@ -41,8 +43,8 @@ const startServer = async () => {
         success: true, 
         message: 'Bill Generator API is running',
         timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV,
-        mongodb: process.env.MONGODB_URI ? 'Configured' : 'Not configured'
+        environment: process.env.NODE_ENV || 'development',
+        mongodb: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
       });
     });
 
@@ -70,13 +72,64 @@ const startServer = async () => {
       app.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
         console.log(`API available at http://localhost:${PORT}/api`);
+        console.log(`Health check: http://localhost:${PORT}/api/health`);
       });
     } else {
       console.log('Production server ready');
     }
   } catch (error) {
     console.error('Failed to start server:', error);
-    process.exit(1);
+    
+    // For development, still start the server even if database fails
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Starting server without database connection...');
+      
+      // Middleware
+      app.use(cors({
+        origin: 'http://localhost:3000',
+        credentials: true
+      }));
+      app.use(express.json({ limit: '50mb' }));
+      app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+      // Health check endpoint
+      app.get('/api/health', (req, res) => {
+        res.json({ 
+          success: true, 
+          message: 'Bill Generator API is running (Database not connected)',
+          timestamp: new Date().toISOString(),
+          environment: 'development',
+          mongodb: 'Disconnected'
+        });
+      });
+
+      // Error handling middleware
+      app.use((err, req, res, next) => {
+        console.error('Server error:', err.stack);
+        res.status(500).json({ 
+          success: false, 
+          message: 'Something went wrong!',
+          error: err.message
+        });
+      });
+
+      // 404 handler
+      app.use('*', (req, res) => {
+        console.log('404 - Route not found:', req.method, req.originalUrl);
+        res.status(404).json({ 
+          success: false, 
+          message: 'Route not found' 
+        });
+      });
+
+      app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT} (without database)`);
+        console.log(`API available at http://localhost:${PORT}/api`);
+        console.log(`Health check: http://localhost:${PORT}/api/health`);
+      });
+    } else {
+      process.exit(1);
+    }
   }
 };
 
