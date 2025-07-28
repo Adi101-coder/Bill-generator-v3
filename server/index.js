@@ -26,7 +26,7 @@ const startServer = async () => {
     // Middleware
     app.use(cors({
       origin: process.env.NODE_ENV === 'production' 
-        ? ['https://your-frontend-domain.vercel.app', 'http://localhost:3000'] 
+        ? ['https://bill-generator-v3-2.vercel.app', 'http://localhost:3000'] 
         : 'http://localhost:3000',
       credentials: true
     }));

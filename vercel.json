@@ -16,7 +16,7 @@
     }
   ],
   "env": {
-    "REACT_APP_API_URL": "https://your-render-app-name.onrender.com/api",
+    "REACT_APP_API_URL": "https://bill-generator-v3-2.onrender.com/api",
     "NODE_ENV": "production"
   },
   "build": {
