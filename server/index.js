@@ -69,16 +69,13 @@ const startServer = async () => {
       });
     });
 
-    // Start server in development
-    if (process.env.NODE_ENV !== 'production') {
-      app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-        console.log(`API available at http://localhost:${PORT}/api`);
-        console.log(`Health check: http://localhost:${PORT}/api/health`);
-      });
-    } else {
-      console.log('Production server ready');
-    }
+    // Start server (both development and production)
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`API available at http://localhost:${PORT}/api`);
+      console.log(`Health check: http://localhost:${PORT}/api/health`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
   } catch (error) {
     console.error('Failed to start server:', error);
     
@@ -130,6 +127,7 @@ const startServer = async () => {
         console.log(`Health check: http://localhost:${PORT}/api/health`);
       });
     } else {
+      console.log('Production server failed to start due to database error');
       process.exit(1);
     }
   }
