@@ -5,8 +5,7 @@
       "src": "server/index.js",
       "use": "@vercel/node",
       "config": {
-        "installCommand": "cd server && npm install",
-        "maxDuration": 30
+        "installCommand": "npm install && cd server && npm install"
       }
     },
     {
