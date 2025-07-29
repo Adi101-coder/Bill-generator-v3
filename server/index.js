@@ -26,7 +26,7 @@ const startServer = async () => {
     // Middleware
     app.use(cors({
       origin: process.env.NODE_ENV === 'production' 
-        ? ['https://ke-snowy.vercel.app', 'http://localhost:3000'] 
+        ? ['https://katiyarelectronics1-three.vercel.app', 'https://ke-snowy.vercel.app', 'http://localhost:3000'] 
         : 'http://localhost:3000',
       credentials: true
     }));
@@ -85,7 +85,7 @@ const startServer = async () => {
       
       // Middleware
       app.use(cors({
-        origin: 'http://localhost:3000',
+        origin: ['http://localhost:3000', 'https://katiyarelectronics1-three.vercel.app'],
         credentials: true
       }));
       app.use(express.json({ limit: '50mb' }));
