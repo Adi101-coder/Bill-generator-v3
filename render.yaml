@@ -1,12 +1,15 @@
 services:
   - type: web
-    name: bill-generator-api
+    name: bill-generator-backend
     env: node
-    plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
       - key: MONGODB_URI
-        sync: false 
+        sync: false
+    buildFilter:
+      paths:
+        - server/**
+    healthCheckPath: /api/health 

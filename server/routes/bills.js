@@ -1062,47 +1062,106 @@ router.put('/fix-idfc', async (req, res) => {
 // Generate and store PDF for a bill
 router.post('/:id/generate-pdf', async (req, res) => {
   try {
+    console.log('Starting PDF generation for bill ID:', req.params.id);
+    
     const bill = await Bill.findById(req.params.id);
     
     if (!bill) {
+      console.log('Bill not found for ID:', req.params.id);
       return res.status(404).json({ success: false, message: 'Bill not found' });
     }
+
+    console.log('Bill found:', bill.invoiceNumber);
 
     // Create uploads directory if it doesn't exist
     const uploadsDir = path.join(__dirname, '..', 'uploads');
     if (!fs.existsSync(uploadsDir)) {
+      console.log('Creating uploads directory:', uploadsDir);
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
     // Generate PDF filename
     const pdfFilename = `${bill.invoiceNumber}_${Date.now()}.pdf`;
     const pdfPath = path.join(uploadsDir, pdfFilename);
+    
+    console.log('PDF will be saved to:', pdfPath);
 
     // Generate HTML for the bill
     const htmlContent = generateBillHTML(bill);
+    console.log('HTML content generated, length:', htmlContent.length);
 
-    // Generate PDF using Puppeteer
-    const browser = await puppeteer.launch({ 
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    const page = await browser.newPage();
-    await page.setContent(htmlContent);
-    await page.pdf({
-      path: pdfPath,
-      format: 'A4',
-      margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
-      printBackground: true,
-      preferCSSPageSize: true,
-      displayHeaderFooter: false
-    });
-    await browser.close();
+    // Generate PDF using Puppeteer with better error handling
+    console.log('Launching Puppeteer browser...');
+    
+    let browser;
+    try {
+      browser = await puppeteer.launch({ 
+        headless: true,
+        args: [
+          '--no-sandbox', 
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor'
+        ]
+      });
+      
+      console.log('Browser launched, creating new page...');
+      const page = await browser.newPage();
+      
+      console.log('Setting HTML content...');
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+      
+      console.log('Generating PDF...');
+      await page.pdf({
+        path: pdfPath,
+        format: 'A4',
+        margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
+        printBackground: true,
+        preferCSSPageSize: true,
+        displayHeaderFooter: false
+      });
+      
+      console.log('PDF generated, closing browser...');
+      await browser.close();
+      
+    } catch (puppeteerError) {
+      console.error('Puppeteer failed:', puppeteerError);
+      
+      // Fallback: Create a simple HTML file instead of PDF
+      console.log('Creating HTML fallback...');
+      const htmlPath = pdfPath.replace('.pdf', '.html');
+      fs.writeFileSync(htmlPath, htmlContent);
+      
+      // Update bill with HTML path instead
+      await Bill.findByIdAndUpdate(bill._id, {
+        generatedPdfPath: `uploads/${path.basename(htmlPath)}`,
+        status: 'generated'
+      });
+      
+      console.log('HTML file created as fallback');
+      
+      return res.json({
+        success: true,
+        message: 'HTML file generated (PDF generation failed)',
+        pdfPath: `uploads/${path.basename(htmlPath)}`
+      });
+    }
+
+    console.log('PDF saved to:', pdfPath);
+    console.log('Checking if file exists:', fs.existsSync(pdfPath));
 
     // Update bill with PDF path
     await Bill.findByIdAndUpdate(bill._id, {
       generatedPdfPath: `uploads/${pdfFilename}`,
       status: 'generated'
     });
+
+    console.log('Bill updated with PDF path');
 
     res.json({
       success: true,
@@ -1112,7 +1171,12 @@ router.post('/:id/generate-pdf', async (req, res) => {
 
   } catch (error) {
     console.error('Error generating PDF:', error);
-    res.status(500).json({ success: false, message: 'Error generating PDF' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error generating PDF',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'PDF generation failed'
+    });
   }
 });
 

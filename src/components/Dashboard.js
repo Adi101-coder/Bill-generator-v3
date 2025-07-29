@@ -307,7 +307,9 @@ const Dashboard = () => {
               alert('Failed to download PDF after generation');
             }
           } else {
-            alert('Failed to generate PDF for this bill');
+            const errorData = await generateResponse.json();
+            console.error('PDF generation failed:', errorData);
+            alert(`Failed to generate PDF: ${errorData.message || 'Unknown error'}`);
           }
         } else {
           alert('Unable to download bill PDF');
