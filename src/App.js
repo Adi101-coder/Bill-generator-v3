@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Upload, FileText, Download, Eye, Calculator } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import Tesseract from 'tesseract.js';
@@ -11,10 +11,6 @@ import './App.css';
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-console.log('API_BASE_URL:', API_BASE_URL);
-console.log('Environment:', process.env.NODE_ENV);
-console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
-console.log('All env vars:', process.env);
 
 // Admin Login Component
 const AdminLogin = ({ onLogin }) => {
@@ -24,6 +20,7 @@ const AdminLogin = ({ onLogin }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (password === 'admin123') {
+      localStorage.setItem('adminAuthenticated', 'true');
       onLogin(true);
     } else {
       setError('Invalid password');
@@ -52,7 +49,10 @@ const AdminLogin = ({ onLogin }) => {
 
 // Admin Dashboard Component
 const AdminDashboard = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    // Check if user is already authenticated from localStorage
+    return localStorage.getItem('adminAuthenticated') === 'true';
+  });
   const [currentView, setCurrentView] = useState('dashboard');
 
   if (!isAuthenticated) {
@@ -78,7 +78,10 @@ const AdminDashboard = () => {
           </button>
           <button 
             className="nav-btn logout"
-            onClick={() => setIsAuthenticated(false)}
+            onClick={() => {
+              localStorage.removeItem('adminAuthenticated');
+              setIsAuthenticated(false);
+            }}
           >
             Logout
           </button>
@@ -104,6 +107,20 @@ const BillGenerator = () => {
   const [manualSerial, setManualSerial] = useState('');
   const [appliedSerial, setAppliedSerial] = useState('');
   const [isSerialUpdated, setIsSerialUpdated] = useState(false);
+
+  // ESC key functionality to close preview
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && showBillPreview) {
+        setShowBillPreview(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showBillPreview]);
 
   const testAPI = async () => {
     try {
@@ -135,27 +152,56 @@ const BillGenerator = () => {
     let rupees = parseInt(rupeesStr, 10); 
     let paise = parseInt(paiseStr, 10); 
 
+    // Function to convert a number to words
+    const convertToWords = (num) => {
+      if (num === 0) return '';
+      if (num < 10) return ones[num];
+      if (num < 20) return teens[num - 10];
+      if (num < 100) {
+        if (num % 10 === 0) return tens[Math.floor(num / 10)];
+        return tens[Math.floor(num / 10)] + ' ' + ones[num % 10];
+      }
+      if (num < 1000) {
+        if (num % 100 === 0) return ones[Math.floor(num / 100)] + ' Hundred';
+        return ones[Math.floor(num / 100)] + ' Hundred And ' + convertToWords(num % 100);
+      }
+      return '';
+    };
+
     let resultWords = []; 
     let crores = Math.floor(rupees / 10000000);
     rupees %= 10000000;
-    if (crores > 0) resultWords.push(crores + ' Crore');
+    if (crores > 0) {
+      const croreWords = convertToWords(crores);
+      resultWords.push(croreWords + (crores === 1 ? ' Crore' : ' Crores'));
+    }
 
     let lakhs = Math.floor(rupees / 100000);
     rupees %= 100000;
-    if (lakhs > 0) resultWords.push(lakhs + ' Lakh');
+    if (lakhs > 0) {
+      const lakhWords = convertToWords(lakhs);
+      resultWords.push(lakhWords + (lakhs === 1 ? ' Lakh' : ' Lakhs'));
+    }
 
     let thousands = Math.floor(rupees / 1000);
     rupees %= 1000;
-    if (thousands > 0) resultWords.push(thousands + ' Thousand');
+    if (thousands > 0) {
+      const thousandWords = convertToWords(thousands);
+      resultWords.push(thousandWords + (thousands === 1 ? ' Thousand' : ' Thousands'));
+    }
 
-    if (rupees > 0) resultWords.push(rupees);
+    if (rupees > 0) {
+      const rupeeWords = convertToWords(rupees);
+      resultWords.push(rupeeWords);
+    }
     
     let finalRupeesPart = resultWords.join(' ').trim();
     if (finalRupeesPart) finalRupeesPart += ' Rupees';
 
     let paiseWords = '';
     if (paise > 0) {
-      paiseWords = paise + ' Paise';
+      const paiseWord = convertToWords(paise);
+      paiseWords = paiseWord + (paise === 1 ? ' Paise' : ' Paise');
     }
 
     if (finalRupeesPart && paiseWords) {
@@ -187,6 +233,7 @@ const BillGenerator = () => {
 
       const isHDBDoc = fullText.includes('HDB FINANCIAL SERVICES');
       const isIDFCBankDoc = fullText.includes('IDFC FIRST Bank');
+      const isCholaDoc = fullText.includes('CHOLA') || fullText.includes('Chola');
 
       let customerName = '';
       let manufacturer = '';
@@ -196,6 +243,7 @@ const BillGenerator = () => {
       let serialNumber = '';
       let assetCost = 0;
       let hdbFinance = false;
+      let detectedCompany = '';
 
       if (isHDBDoc) {
         hdbFinance = true;
@@ -234,6 +282,7 @@ const BillGenerator = () => {
         }
         
         assetCategory = 'Electronics';
+        detectedCompany = 'HDB';
       } else if (isIDFCBankDoc) {
         const customerMatch = fullText.match(/loan application of (.+?) has been approved for/i);
         customerName = customerMatch ? `${customerMatch[1].trim()} [IDFC FIRST BANK]` : '';
@@ -322,6 +371,34 @@ const BillGenerator = () => {
         if (assetCostMatch) {
           assetCost = parseFloat(assetCostMatch[1].replace(/[^0-9.]/g, ''));
         }
+        detectedCompany = 'IDFC';
+      } else if (isCholaDoc) {
+        const customerMatch = fullText.match(/Customer Name:?[ \t]*([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i);
+        customerName = customerMatch ? customerMatch[1].trim() : '';
+        customerName = customerName.replace(/\s+Customer$/, '').trim();
+        
+        const manufacturerMatch = fullText.match(/Manufacturer:?[ \t]*([^ \t\n]+)/i);
+        manufacturer = manufacturerMatch ? manufacturerMatch[1].trim() : '';
+        
+        const addressMatch = fullText.match(/(?:Customer )?Address:?[ \t]*([\s\S]*?\d{6})/i);
+        customerAddress = addressMatch ? addressMatch[1].trim() : '';
+        customerAddress = customerAddress.replace(/^(?:Customer )?Address:?[ \t]*(.*)$/i, '$1').trim();
+        
+        const rawAssetCategoryMatch = fullText.match(/Asset Category:?[ \t]*([A-Za-z\s]+?)(?=\s*(?:Sub-Category|Variant|\bModel\b|\bSerial Number\b|\bAsset Cost\b|$))/i);
+        assetCategory = rawAssetCategoryMatch ? rawAssetCategoryMatch[1].trim() : '';
+        if (assetCategory.endsWith('D')) assetCategory = assetCategory.slice(0, -1).trim();
+        
+        const modelMatch = fullText.match(/Model:?\s*([^\n\r]+?)(?=\s*Asset Category|\n|\r)/i);
+        model = modelMatch ? modelMatch[1].trim() : '';
+        
+        const serialNumberMatch = fullText.match(/Serial Number:?[ \t]*([^ \t\n]+)/i);
+        serialNumber = serialNumberMatch ? serialNumberMatch[1].trim() : '';
+        
+        const assetCostMatch = fullText.match(/A\. Asset Cost[^\d]*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/i);
+        if (assetCostMatch) {
+          assetCost = parseFloat(assetCostMatch[1].replace(/[^0-9.]/g, ''));
+        }
+        detectedCompany = 'Chola';
       } else {
         const customerMatch = fullText.match(/Customer Name:?[ \t]*([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i);
         customerName = customerMatch ? customerMatch[1].trim() : '';
@@ -348,18 +425,20 @@ const BillGenerator = () => {
         if (assetCostMatch) {
           assetCost = parseFloat(assetCostMatch[1].replace(/[^0-9.]/g, ''));
         }
+        detectedCompany = 'Other';
       }
 
       const extractedData = {
         customerName,
         customerAddress,
         manufacturer,
-        assetCategory,
+        assetCategory: detectedCompany, // Use detected company as assetCategory
         model,
         imeiSerialNumber: serialNumber,
         date: new Date().toISOString().split('T')[0],
         assetCost,
-        hdbFinance
+        hdbFinance,
+        detectedCompany
       };
 
       // Debug logging for IDFC bills
@@ -400,7 +479,7 @@ const BillGenerator = () => {
         customerName: data.customerName || 'Unknown Customer',
         customerAddress: data.customerAddress || 'No Address',
         manufacturer: data.manufacturer || 'Unknown Manufacturer',
-        assetCategory: data.assetCategory || 'Electronics',
+        assetCategory: data.assetCategory || 'Other', // Use detected company
         model: data.model || 'Unknown Model',
         imeiSerialNumber: data.imeiSerialNumber || '',
         assetCost: data.assetCost || 0,
@@ -410,7 +489,7 @@ const BillGenerator = () => {
         hdbFinance: data.hdbFinance || false,
         status: 'generated',
         date: new Date().toISOString().split('T')[0],
-        product: `${data.manufacturer || 'Unknown'} ${data.assetCategory || 'Electronics'} - ${data.model || 'Unknown'}`,
+        product: `${data.manufacturer || 'Unknown'} ${data.assetCategory || 'Other'} - ${data.model || 'Unknown'}`,
         amount: data.assetCost || 0
       };
 
@@ -429,11 +508,11 @@ const BillGenerator = () => {
       if (response.ok) {
         const result = await response.json();
         console.log('Bill saved to database successfully:', result);
-        return true;
+        return result.data; // Return the saved bill data with _id
       } else {
         const errorText = await response.text();
         console.error('Failed to save bill to database. Status:', response.status, 'Error:', errorText);
-        return false;
+        return null;
       }
     } catch (error) {
       console.error('Error saving bill:', error);
@@ -441,36 +520,66 @@ const BillGenerator = () => {
     }
   };
 
-  const handlePreviewBill = () => {
+  const generatePDFForBill = async (billId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bills/${billId}/generate-pdf`, {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('PDF generated successfully:', result);
+        return true;
+      } else {
+        console.error('Failed to generate PDF');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      return false;
+    }
+  };
+
+  const handlePreviewBill = async () => {
     if (!extractedData || !invoiceNumber.trim()) return;
     
     // Show preview immediately
     setShowBillPreview(true);
     
-    // Save to database in the background (non-blocking)
-    saveBillToDatabase(extractedData, invoiceNumber).then(success => {
-      if (success) {
-        console.log('Bill saved to database in background');
+    // Save to database and generate PDF in the background
+    try {
+      const savedBill = await saveBillToDatabase(extractedData, invoiceNumber);
+      if (savedBill && savedBill._id) {
+        console.log('Bill saved to database, generating PDF...');
+        await generatePDFForBill(savedBill._id);
+        console.log('PDF generated successfully');
       } else {
         console.log('Failed to save bill to database, but preview is still shown');
       }
-    });
+    } catch (error) {
+      console.error('Error in preview process:', error);
+    }
   };
 
-  const handlePrintDownload = () => {
+  const handlePrintDownload = async () => {
     if (!extractedData || !invoiceNumber.trim()) return;
     
     // Print immediately
     handlePrint();
     
-    // Save to database in the background (non-blocking)
-    saveBillToDatabase(extractedData, invoiceNumber).then(success => {
-      if (success) {
-        console.log('Bill saved to database in background');
+    // Save to database and generate PDF in the background
+    try {
+      const savedBill = await saveBillToDatabase(extractedData, invoiceNumber);
+      if (savedBill && savedBill._id) {
+        console.log('Bill saved to database, generating PDF...');
+        await generatePDFForBill(savedBill._id);
+        console.log('PDF generated successfully');
       } else {
         console.log('Failed to save bill to database, but print/download still works');
       }
-    });
+    } catch (error) {
+      console.error('Error in print/download process:', error);
+    }
   };
 
   const handleFileUpload = (event) => {
@@ -512,11 +621,11 @@ const BillGenerator = () => {
     const serialToDisplay = (isHDBChecked ? appliedSerial : extractedData.imeiSerialNumber) || '';
 
     return `
-    <div style="width: 100%; max-width: 210mm; min-height: 297mm; margin: 0 auto; font-family: Arial, sans-serif; font-size: 9px; line-height: 1.2; box-sizing: border-box; padding: 5mm;">
+    <div style="width: 100%; max-width: 210mm; height: 297mm; margin: 0 auto; font-family: Arial, sans-serif; font-size: 10px; line-height: 1.3; box-sizing: border-box; padding: 8mm; overflow: hidden;">
       <div style="text-align:center; font-size:18px; font-weight:bold; margin-bottom:8px;">Tax Invoice</div>
       <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 0; table-layout: fixed;">
         <tr>
-          <td rowspan="8" style="border:1px solid #000; padding:8px; width:40%; vertical-align:top; font-weight:bold; font-size:8px;">
+                      <td rowspan="8" style="border:1px solid #000; padding:10px; width:40%; vertical-align:top; font-weight:bold; font-size:9px;">
             KATIYAR ELECTRONICS<br>
             H.I.G.J-33 VISHWABANK BARRA<br>
             KARRAHI<br>
@@ -537,64 +646,64 @@ const BillGenerator = () => {
             ${extractedData.customerName}<br>
             ${extractedData.customerAddress}
           </td>
-          <td style="border:1px solid #000; padding:8px; font-weight:bold; width:50%; font-size:8px; text-align:center;">Invoice No.<div style='height:5px;'></div><div>${invoiceNumber}</div></td>
-          <td style="border:1px solid #000; padding:8px; font-weight:bold; width:50%; font-size:8px; text-align:center;">Dated<div style='height:5px;'></div><div>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div></td>
+                      <td style="border:1px solid #000; padding:10px; font-weight:bold; width:50%; font-size:9px; text-align:center;">Invoice No.<div style='height:6px;'></div><div>${invoiceNumber}</div></td>
+            <td style="border:1px solid #000; padding:10px; font-weight:bold; width:50%; font-size:9px; text-align:center;">Dated<div style='height:6px;'></div><div>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div></td>
         </tr>
         <tr>
-          <td style="border:1px solid #000; padding:8px; font-weight:bold; font-size:8px; text-align:center; width:50%;">Delivery Note<div style='height:5px;'></div></td>
-          <td style="border:1px solid #000; padding:8px; font-weight:bold; font-size:8px; text-align:center; width:50%;"></td>
-        </tr>
-        <tr>
-          <td style="border:1px solid #000; padding:8px; font-weight:bold; font-size:8px; text-align:center; width:50%;">Buyer's Order No.<div style='height:5px;'></div></td>
-          <td style="border:1px solid #000; padding:8px; font-weight:bold; font-size:8px; text-align:center; width:50%;">Dated<div style='height:5px;'></div></td>
-        </tr>
-        <tr>
-          <td style="border:1px solid #000; padding:8px; font-weight:bold; font-size:8px; text-align:center; width:50%;">Dispatch Doc No.<div style='height:5px;'></div></td>
-          <td style="border:1px solid #000; padding:8px; font-weight:bold; font-size:8px; text-align:center; width:50%;">Delivery Note Date<div style='height:5px;'></div></td>
-        </tr>
-        <tr>
-          <td style="border:1px solid #000; padding:8px; font-weight:bold; font-size:8px; text-align:center; width:50%;">Dispatched through<div style='height:5px;'></div></td>
-          <td style="border:1px solid #000; padding:8px; font-weight:bold; font-size:8px; text-align:center; width:50%;">Destination<div style='height:5px;'></div></td>
-        </tr>
-        <tr>
-          <td colspan="2" style="border:1px solid #000; padding:8px; font-size:8px;"></td>
+                      <td style="border:1px solid #000; padding:10px; font-weight:bold; font-size:9px; text-align:center; width:50%;">Delivery Note<div style='height:6px;'></div></td>
+            <td style="border:1px solid #000; padding:10px; font-weight:bold; font-size:9px; text-align:center; width:50%;"></td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #000; padding:10px; font-weight:bold; font-size:9px; text-align:center; width:50%;">Buyer's Order No.<div style='height:6px;'></div></td>
+            <td style="border:1px solid #000; padding:10px; font-weight:bold; font-size:9px; text-align:center; width:50%;">Dated<div style='height:6px;'></div></td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #000; padding:10px; font-weight:bold; font-size:9px; text-align:center; width:50%;">Dispatch Doc No.<div style='height:6px;'></div></td>
+            <td style="border:1px solid #000; padding:10px; font-weight:bold; font-size:9px; text-align:center; width:50%;">Delivery Note Date<div style='height:6px;'></div></td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #000; padding:10px; font-weight:bold; font-size:9px; text-align:center; width:50%;">Dispatched through<div style='height:6px;'></div></td>
+            <td style="border:1px solid #000; padding:10px; font-weight:bold; font-size:9px; text-align:center; width:50%;">Destination<div style='height:6px;'></div></td>
+          </tr>
+          <tr>
+            <td colspan="2" style="border:1px solid #000; padding:10px; font-size:9px;"></td>
         </tr>
       </table>
       <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-top:0; margin-bottom: 0;">
-        <tr style="background-color: #f0f0f0;">
-          <td style="border: 1px solid #000; text-align: center; width: 4%; padding: 2px; font-size:8px;"><strong>Sl</strong></td>
-          <td style="border: 1px solid #000; text-align: center; width: 40%; padding: 2px; font-size:8px;"><strong>Description of Goods</strong></td>
-          <td style="border: 1px solid #000; text-align: center; width: 12%; padding: 2px; font-size:8px;"><strong>HSN/SAC</strong></td>
-          <td style="border: 1px solid #000; text-align: center; width: 8%; padding: 2px; font-size:8px;"><strong>Quantity</strong></td>
-          <td style="border: 1px solid #000; text-align: center; width: 12%; padding: 2px; font-size:8px;"><strong>Rate</strong></td>
-          <td style="border: 1px solid #000; text-align: center; width: 4%; padding: 2px; font-size:8px;"><strong>per</strong></td>
-          <td style="border: 1px solid #000; text-align: center; width: 20%; padding: 2px; font-size:8px;"><strong>Amount</strong></td>
-        </tr>
+                  <tr style="background-color: #f0f0f0;">
+            <td style="border: 1px solid #000; text-align: center; width: 4%; padding: 3px; font-size:9px;"><strong>Sl</strong></td>
+            <td style="border: 1px solid #000; text-align: center; width: 40%; padding: 3px; font-size:9px;"><strong>Description of Goods</strong></td>
+            <td style="border: 1px solid #000; text-align: center; width: 12%; padding: 3px; font-size:9px;"><strong>HSN/SAC</strong></td>
+            <td style="border: 1px solid #000; text-align: center; width: 8%; padding: 3px; font-size:9px;"><strong>Quantity</strong></td>
+            <td style="border: 1px solid #000; text-align: center; width: 12%; padding: 3px; font-size:9px;"><strong>Rate</strong></td>
+            <td style="border: 1px solid #000; text-align: center; width: 4%; padding: 3px; font-size:9px;"><strong>per</strong></td>
+            <td style="border: 1px solid #000; text-align: center; width: 20%; padding: 3px; font-size:9px;"><strong>Amount</strong></td>
+          </tr>
         <tr>
-          <td style="border: 1px solid #000; text-align: center; padding: 2px; font-size:8px;">1</td>
-          <td style="border: 1px solid #000; vertical-align: top; padding: 4px; font-size:8px;">
-            <strong>${extractedData.manufacturer} ${extractedData.assetCategory}</strong><br><br>
-            <strong>Model No:</strong> ${extractedData.model}<br>
-            ${serialToDisplay ? `<b>Serial Number:</b> ${serialToDisplay}<br>` : ''}
-            <div style="display: flex; justify-content: space-between; margin-top: 4px;">
-              <div><strong>CGST</strong></div>
-              <div>${formatAmount(Number(taxDetails.cgst))}</div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0;">
-              <div><strong>SGST</strong></div>
-              <div>${formatAmount(Number(taxDetails.sgst))}</div>
-            </div>
-            <div style="height: 350px;"></div>
-          </td>
-          <td style="border: 1px solid #000; text-align: center; padding: 2px; font-size:8px;"></td>
-          <td style="border: 1px solid #000; text-align: center; padding: 2px; font-size:8px;">1 PCS</td>
-          <td style="border: 1px solid #000; text-align: center; padding: 2px; font-size:8px;">${formatAmount(Number(taxDetails.rate))}</td>
-          <td style="border: 1px solid #000; text-align: center; padding: 2px; font-size:8px;">PCS</td>
-          <td style="border: 1px solid #000; text-align: center; padding: 2px; font-size:8px;">${formatAmount(Number(taxDetails.rate))}</td>
-        </tr>
-        <tr>
-          <td style="border: 1px solid #000; text-align: right; padding: 2px; font-size:8px;" colspan="6"><strong>Total</strong></td>
-          <td style="border: 1px solid #000; text-align: center; padding: 2px; font-size:8px;"><strong>₹ ${formatAmount(Number(extractedData.assetCost))}</strong></td>
+                      <td style="border: 1px solid #000; text-align: center; padding: 3px; font-size:9px;">1</td>
+            <td style="border: 1px solid #000; vertical-align: top; padding: 6px; font-size:9px;">
+              <strong>${extractedData.manufacturer} ${extractedData.assetCategory}</strong><br><br>
+              <strong>Model No:</strong> ${extractedData.model}<br>
+              ${serialToDisplay ? `<b>Serial Number:</b> ${serialToDisplay}<br>` : ''}
+              <div style="display: flex; justify-content: space-between; margin-top: 6px;">
+                <div><strong>CGST</strong></div>
+                <div>${formatAmount(Number(taxDetails.cgst))}</div>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 0;">
+                <div><strong>SGST</strong></div>
+                <div>${formatAmount(Number(taxDetails.sgst))}</div>
+              </div>
+              <div style="height: 280px;"></div>
+            </td>
+            <td style="border: 1px solid #000; text-align: center; padding: 3px; font-size:9px;"></td>
+            <td style="border: 1px solid #000; text-align: center; padding: 3px; font-size:9px;">1 PCS</td>
+            <td style="border: 1px solid #000; text-align: center; padding: 3px; font-size:9px;">${formatAmount(Number(taxDetails.rate))}</td>
+            <td style="border: 1px solid #000; text-align: center; padding: 3px; font-size:9px;">PCS</td>
+            <td style="border: 1px solid #000; text-align: center; padding: 3px; font-size:9px;">${formatAmount(Number(taxDetails.rate))}</td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #000; text-align: right; padding: 3px; font-size:9px;" colspan="6"><strong>Total</strong></td>
+            <td style="border: 1px solid #000; text-align: center; padding: 3px; font-size:9px;"><strong>₹ ${formatAmount(Number(extractedData.assetCost))}</strong></td>
         </tr>
       </table>
       <table style="width: 100%; border-collapse: collapse; border-left: 1.5px solid #000; border-right: 1.5px solid #000; margin: 0;">
@@ -736,10 +845,10 @@ const BillGenerator = () => {
               <div><strong>Customer Name:</strong> {extractedData.customerName}</div>
               <div><strong>Manufacturer:</strong> {extractedData.manufacturer}</div>
               <div className="full"><strong>Customer Address:</strong> {extractedData.customerAddress}</div>
-              <div><strong>Asset Category:</strong> {extractedData.assetCategory}</div>
               <div><strong>Model:</strong> {extractedData.model}</div>
               <div><strong>Serial Number:</strong> {extractedData.imeiSerialNumber}</div>
               <div><strong>Asset Cost:</strong> ₹{extractedData.assetCost.toFixed(2)}</div>
+              <div><strong>Detected Company:</strong> {extractedData.detectedCompany || 'Unknown'}</div>
             </div>
 
             <div style={{ marginTop: 32 }}>
@@ -832,21 +941,6 @@ const BillGenerator = () => {
         )}
 
       <h2 style={{ textAlign: 'center', margin: '24px 0 16px 0' }}>Professional Bill Generator</h2>
-      <div style={{ textAlign: 'center', margin: '16px 0' }}>
-        <a 
-          href="/admin" 
-          style={{ 
-            color: '#2563eb', 
-            textDecoration: 'none', 
-            padding: '8px 16px', 
-            border: '1px solid #2563eb', 
-            borderRadius: '4px',
-            fontSize: '14px'
-          }}
-        >
-          Admin Dashboard
-        </a>
-      </div>
       <div style={{ margin: '16px 0', textAlign: 'center' }}>
         <label>
           <input

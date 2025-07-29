@@ -4,6 +4,38 @@
   margin: 0 auto;
   background: #f8fafc;
   min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Mobile-first improvements */
+.dashboard * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Touch-friendly table scrolling */
+.bills-table-container {
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.bills-table-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.bills-table-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.bills-table-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.bills-table-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .dashboard-header {
@@ -588,7 +620,27 @@
   flex: 1;
 }
 
-/* Responsive Design */
+/* Enhanced Responsive Design */
+@media (max-width: 1024px) {
+  .dashboard {
+    padding: 20px;
+  }
+  
+  .analytics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  
+  .bills-table {
+    font-size: 13px;
+  }
+  
+  .bills-table th,
+  .bills-table td {
+    padding: 10px 8px;
+  }
+}
+
 @media (max-width: 768px) {
   .dashboard {
     padding: 16px;
@@ -598,12 +650,46 @@
     flex-direction: column;
     gap: 16px;
     text-align: center;
+    padding: 20px;
+  }
+  
+  .dashboard-header h1 {
+    font-size: 26px;
+  }
+  
+  .header-actions {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  
+  .btn-primary,
+  .btn-secondary {
+    padding: 10px 16px;
+    font-size: 14px;
   }
 
   .analytics-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .analytics-card {
+    padding: 16px;
+  }
+  
+  .card-content h3 {
+    font-size: 22px;
+  }
+  
+  .card-content p {
+    font-size: 14px;
   }
 
+  .search-filters {
+    padding: 16px;
+  }
+  
   .search-input {
     flex-direction: column;
     gap: 12px;
@@ -611,19 +697,42 @@
 
   .search-input input {
     width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  
+  .search-btn {
+    padding: 10px 16px;
+    font-size: 14px;
   }
 
   .filter-row {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .filter-row input,
+  .filter-row select {
+    padding: 10px 12px;
+    font-size: 14px;
   }
 
   .bills-table {
     font-size: 12px;
+    margin: 0 -8px;
   }
 
   .bills-table th,
   .bills-table td {
     padding: 8px 6px;
+  }
+  
+  .bills-table th {
+    font-size: 11px;
+  }
+  
+  .bills-table td {
+    font-size: 11px;
   }
 
   .action-buttons {
@@ -632,13 +741,18 @@
   }
 
   .action-btn {
-    min-width: 32px;
-    padding: 3px 4px;
-    font-size: 9px;
+    min-width: 28px;
+    padding: 4px 6px;
+    font-size: 10px;
   }
 
   .action-btn span {
     display: none;
+  }
+  
+  .action-btn svg {
+    width: 14px;
+    height: 14px;
   }
 
   .detail-row {
@@ -648,29 +762,315 @@
 
   .detail-row strong {
     min-width: auto;
+    font-size: 12px;
   }
 
   .detail-row span {
     text-align: left;
+    font-size: 12px;
+  }
+  
+  .modal-content {
+    margin: 16px;
+    padding: 20px;
+    max-height: 85vh;
+    width: calc(100% - 32px);
+  }
+  
+  .modal-header {
+    padding: 16px 20px;
+  }
+  
+  .modal-header h3 {
+    font-size: 18px;
+  }
+  
+  .modal-body {
+    padding: 16px 20px;
+  }
+  
+  .pagination {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+  
+  .pagination button {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  
+  .pagination span {
+    font-size: 12px;
   }
 }
 
 @media (max-width: 480px) {
+  .dashboard {
+    padding: 12px;
+  }
+  
+  .dashboard-header {
+    padding: 16px;
+    gap: 12px;
+  }
+  
   .dashboard-header h1 {
-    font-size: 24px;
+    font-size: 22px;
+  }
+  
+  .header-actions {
+    gap: 6px;
+  }
+  
+  .btn-primary,
+  .btn-secondary {
+    padding: 8px 12px;
+    font-size: 12px;
   }
 
   .analytics-card {
-    padding: 16px;
+    padding: 12px;
   }
 
   .card-content h3 {
-    font-size: 20px;
+    font-size: 18px;
+  }
+  
+  .card-content p {
+    font-size: 12px;
+  }
+  
+  .card-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .search-filters {
+    padding: 12px;
+  }
+  
+  .search-input input {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  
+  .search-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  
+  .filter-row {
+    gap: 8px;
+  }
+  
+  .filter-row input,
+  .filter-row select {
+    padding: 8px 10px;
+    font-size: 13px;
   }
 
   .table-header {
     flex-direction: column;
     gap: 12px;
     text-align: center;
+    padding: 16px;
+  }
+  
+  .table-header h2 {
+    font-size: 18px;
+  }
+  
+  .table-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .bills-table {
+    font-size: 11px;
+    margin: 0 -4px;
+  }
+
+  .bills-table th,
+  .bills-table td {
+    padding: 6px 4px;
+  }
+  
+  .bills-table th {
+    font-size: 10px;
+  }
+  
+  .bills-table td {
+    font-size: 10px;
+  }
+
+  .action-btn {
+    min-width: 24px;
+    padding: 3px 4px;
+    font-size: 9px;
+  }
+  
+  .action-btn svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .modal-content {
+    margin: 8px;
+    padding: 16px;
+    max-height: 80vh;
+  }
+  
+  .modal-header {
+    padding: 12px 16px;
+  }
+  
+  .modal-header h3 {
+    font-size: 16px;
+  }
+  
+  .modal-body {
+    padding: 12px 16px;
+  }
+  
+  .pagination {
+    gap: 6px;
+  }
+  
+  .pagination button {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+  
+  .pagination span {
+    font-size: 11px;
+  }
+  
+  .notification-toast {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 360px) {
+  .dashboard {
+    padding: 8px;
+  }
+  
+  .dashboard-header {
+    padding: 12px;
+  }
+  
+  .dashboard-header h1 {
+    font-size: 20px;
+  }
+  
+  .btn-primary,
+  .btn-secondary {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .analytics-card {
+    padding: 8px;
+  }
+
+  .card-content h3 {
+    font-size: 16px;
+  }
+  
+  .card-content p {
+    font-size: 11px;
+  }
+  
+  .card-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .search-filters {
+    padding: 8px;
+  }
+  
+  .search-input input {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  
+  .search-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  
+  .filter-row input,
+  .filter-row select {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .table-header {
+    padding: 12px;
+  }
+  
+  .table-header h2 {
+    font-size: 16px;
+  }
+
+  .bills-table {
+    font-size: 10px;
+  }
+
+  .bills-table th,
+  .bills-table td {
+    padding: 4px 2px;
+  }
+  
+  .bills-table th {
+    font-size: 9px;
+  }
+  
+  .bills-table td {
+    font-size: 9px;
+  }
+
+  .action-btn {
+    min-width: 20px;
+    padding: 2px 3px;
+    font-size: 8px;
+  }
+  
+  .action-btn svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  .modal-content {
+    margin: 4px;
+    padding: 12px;
+  }
+  
+  .modal-header {
+    padding: 8px 12px;
+  }
+  
+  .modal-header h3 {
+    font-size: 14px;
+  }
+  
+  .modal-body {
+    padding: 8px 12px;
+  }
+  
+  .pagination button {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+  
+  .pagination span {
+    font-size: 10px;
   }
 } 

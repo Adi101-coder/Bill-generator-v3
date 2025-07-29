@@ -3,6 +3,39 @@ body {
   min-height: 100vh;
   margin: 0;
   font-family: 'Segoe UI', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Mobile-first improvements */
+* {
+  box-sizing: border-box;
+}
+
+/* Touch-friendly improvements */
+button, 
+.btn-primary, 
+.btn-secondary, 
+.action-btn, 
+.nav-btn {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Prevent zoom on input focus for iOS */
+input, 
+select, 
+textarea {
+  font-size: 16px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* Smooth scrolling for mobile */
+html {
+  scroll-behavior: smooth;
 }
 
 /* Admin Login Styles */
@@ -313,15 +346,164 @@ body {
   color: #ef4444;
 }
 
-@media (max-width: 700px) {
+/* Enhanced Responsive Design */
+@media (max-width: 768px) {
   .bill-container {
-    padding: 16px 4px;
+    padding: 12px 8px;
   }
+  
+  .bill-header {
+    font-size: 24px;
+    margin-bottom: 20px;
+  }
+  
   .info-card {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 12px;
+    padding: 16px;
   }
+  
+  .action-btns {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .action-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 14px 20px;
+    font-size: 16px;
+  }
+  
   .modal-content {
-    padding: 12px 2px 2px 2px;
+    margin: 16px;
+    padding: 20px 16px;
+    max-height: 85vh;
+    width: calc(100% - 32px);
+  }
+  
+  .modal-close {
+    top: 12px;
+    right: 16px;
+    font-size: 1.5rem;
+  }
+  
+  .login-card {
+    margin: 16px;
+    padding: 24px 20px;
+    width: calc(100% - 32px);
+  }
+  
+  .admin-nav {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+  }
+  
+  .nav-links {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .nav-btn {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .bill-container {
+    padding: 8px 4px;
+  }
+  
+  .bill-header {
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+  
+  .info-card {
+    padding: 12px;
+    gap: 8px;
+  }
+  
+  .input-label {
+    font-size: 14px;
+  }
+  
+  .input-box {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  
+  .action-btn {
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+  
+  .modal-content {
+    margin: 8px;
+    padding: 16px 12px;
+    max-height: 80vh;
+  }
+  
+  .login-card {
+    margin: 8px;
+    padding: 20px 16px;
+  }
+  
+  .login-card h2 {
+    font-size: 20px;
+  }
+  
+  .password-input {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  
+  .login-btn {
+    padding: 10px;
+    font-size: 14px;
+  }
+  
+  .admin-nav {
+    padding: 12px;
+  }
+  
+  .nav-brand {
+    font-size: 18px;
+  }
+  
+  .nav-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .bill-container {
+    padding: 4px 2px;
+  }
+  
+  .bill-header {
+    font-size: 18px;
+  }
+  
+  .info-card {
+    padding: 8px;
+  }
+  
+  .action-btn {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  
+  .modal-content {
+    margin: 4px;
+    padding: 12px 8px;
+  }
+  
+  .login-card {
+    margin: 4px;
+    padding: 16px 12px;
   }
 }

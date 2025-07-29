@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   TrendingUp, 
   Search, 
@@ -11,11 +12,14 @@ import {
   DollarSign,
   Package,
   FileText,
-  RefreshCw
+  RefreshCw,
+  HardDrive
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import './Dashboard.css';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [bills, setBills] = useState([]);
   const [analytics, setAnalytics] = useState({});
   const [loading, setLoading] = useState(true);
@@ -37,7 +41,30 @@ const Dashboard = () => {
   const [diskSpace, setDiskSpace] = useState(null);
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [notification, setNotification] = useState(null);
-  const [showDebug, setShowDebug] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingBill, setEditingBill] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+
+  // ESC key functionality to close modals
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        if (showEditModal) {
+          setShowEditModal(false);
+          setEditingBill(null);
+          setEditFormData({});
+        }
+        if (showStorageModal) {
+          setShowStorageModal(false);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showEditModal, showStorageModal]);
 
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -50,16 +77,16 @@ const Dashboard = () => {
         ...filterParams
       });
 
+      console.log('Fetching bills with params:', queryParams.toString());
       const response = await fetch(`${API_BASE_URL}/bills?${queryParams}`);
       const data = await response.json();
+
+      console.log('Fetched bills data:', data);
 
       if (data.success) {
         setBills(data.data);
         setTotalPages(data.pagination.totalPages);
-        if (data.data.length > 0) {
-          setNotification(`Loaded ${data.data.length} bills`);
-          setTimeout(() => setNotification(null), 3000);
-        }
+        console.log('Updated bills state with:', data.data.length, 'bills');
       }
     } catch (error) {
       console.error('Error fetching bills:', error);
@@ -188,29 +215,9 @@ const Dashboard = () => {
     });
   };
 
-  const fixIDFCBills = async () => {
-    if (window.confirm('This will attempt to fix asset categories for existing IDFC bills. Continue?')) {
-      try {
-        setRefreshing(true);
-        const response = await fetch(`${API_BASE_URL}/bills/fix-idfc`, {
-          method: 'PUT'
-        });
-        const data = await response.json();
-        if (data.success) {
-          setNotification(`Fixed ${data.fixedCount} IDFC bills`);
-          setTimeout(() => setNotification(null), 3000);
-          fetchBills(currentPage, filters);
-          fetchAnalytics();
-        }
-      } catch (error) {
-        console.error('Error fixing IDFC bills:', error);
-        setNotification('Error fixing IDFC bills');
-        setTimeout(() => setNotification(null), 3000);
-      } finally {
-        setRefreshing(false);
-      }
-    }
-  };
+
+
+
 
   const handleDeleteBill = async (billId) => {
     if (!window.confirm('Are you sure you want to delete this bill?')) {
@@ -228,6 +235,166 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error('Error deleting bill:', error);
+    }
+  };
+
+  const handleEditBill = (bill) => {
+    console.log('🔍 Opening edit modal for bill:', bill);
+    console.log('🔍 Bill ID:', bill._id);
+    console.log('🔍 Bill data:', JSON.stringify(bill, null, 2));
+    
+    setEditingBill(bill);
+    const formData = {
+      customerName: bill.customerName || '',
+      customerAddress: bill.customerAddress || '',
+      manufacturer: bill.manufacturer || '',
+      assetCategory: bill.assetCategory || '',
+      model: bill.model || '',
+      imeiSerialNumber: bill.imeiSerialNumber || '',
+      assetCost: bill.assetCost || 0,
+      hdbFinance: bill.hdbFinance || false
+    };
+    console.log('🔍 Setting edit form data:', formData);
+    setEditFormData(formData);
+    setShowEditModal(true);
+    console.log('✅ Edit modal should now be visible');
+  };
+
+  const handleDownloadBill = async (bill) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bills/${bill._id}/download`);
+      
+      if (response.ok) {
+        // Download the PDF file
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${bill.invoiceNumber}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        // Show success message
+        setNotification('PDF downloaded successfully');
+        setTimeout(() => setNotification(null), 3000);
+      } else {
+        const errorData = await response.json();
+        if (errorData.message === 'PDF not generated for this bill') {
+          // Try to generate PDF first
+          const generateResponse = await fetch(`${API_BASE_URL}/bills/${bill._id}/generate-pdf`, {
+            method: 'POST'
+          });
+          
+          if (generateResponse.ok) {
+            // Try downloading again
+            const downloadResponse = await fetch(`${API_BASE_URL}/bills/${bill._id}/download`);
+            if (downloadResponse.ok) {
+              const blob = await downloadResponse.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `${bill.invoiceNumber}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              document.body.removeChild(a);
+              
+              setNotification('PDF generated and downloaded successfully');
+              setTimeout(() => setNotification(null), 3000);
+            } else {
+              alert('Failed to download PDF after generation');
+            }
+          } else {
+            alert('Failed to generate PDF for this bill');
+          }
+        } else {
+          alert('Unable to download bill PDF');
+        }
+      }
+    } catch (error) {
+      console.error('Error downloading bill:', error);
+      alert('Error downloading bill');
+    }
+  };
+
+  const handleExportData = async () => {
+    try {
+      // Fetch all bills for export
+      const response = await fetch(`${API_BASE_URL}/bills?limit=10000&page=1`);
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        // Prepare data for Excel
+        const excelData = data.data.map(bill => ({
+          'Invoice Number': bill.invoiceNumber,
+          'Customer Name': bill.customerName,
+          'Customer Address': bill.customerAddress,
+          'Manufacturer': bill.manufacturer,
+          'Asset Category': bill.assetCategory,
+          'Model': bill.model,
+          'IMEI/Serial Number': bill.imeiSerialNumber || '',
+          'Asset Cost (₹)': bill.assetCost,
+          'Taxable Value (₹)': bill.taxDetails?.taxableValue || '',
+          'CGST (₹)': bill.taxDetails?.cgst || '',
+          'SGST (₹)': bill.taxDetails?.sgst || '',
+          'Total Tax (₹)': bill.taxDetails?.totalTaxAmount || '',
+          'Total Amount (₹)': bill.assetCost,
+          'Amount in Words': bill.amountInWords || '',
+          'HDB Finance': bill.hdbFinance ? 'Yes' : 'No',
+          'Status': bill.status,
+          'Created Date': new Date(bill.createdAt).toLocaleDateString('en-GB'),
+          'Created Time': new Date(bill.createdAt).toLocaleTimeString('en-GB')
+        }));
+
+        // Create workbook and worksheet
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(excelData);
+
+        // Set column widths
+        const colWidths = [
+          { wch: 15 }, // Invoice Number
+          { wch: 20 }, // Customer Name
+          { wch: 30 }, // Customer Address
+          { wch: 15 }, // Manufacturer
+          { wch: 15 }, // Asset Category
+          { wch: 15 }, // Model
+          { wch: 20 }, // IMEI/Serial Number
+          { wch: 12 }, // Asset Cost
+          { wch: 15 }, // Taxable Value
+          { wch: 10 }, // CGST
+          { wch: 10 }, // SGST
+          { wch: 12 }, // Total Tax
+          { wch: 12 }, // Total Amount
+          { wch: 40 }, // Amount in Words
+          { wch: 10 }, // HDB Finance
+          { wch: 10 }, // Status
+          { wch: 12 }, // Created Date
+          { wch: 12 }  // Created Time
+        ];
+        ws['!cols'] = colWidths;
+
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(wb, ws, 'Bills Data');
+
+        // Generate filename with current date
+        const currentDate = new Date().toISOString().split('T')[0];
+        const filename = `bills_export_${currentDate}.xlsx`;
+
+        // Save the file
+        XLSX.writeFile(wb, filename);
+        
+        setNotification('Data exported successfully to Excel');
+        setTimeout(() => setNotification(null), 3000);
+      } else {
+        setNotification('Failed to fetch data for export');
+        setTimeout(() => setNotification(null), 3000);
+      }
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      setNotification('Error exporting data to Excel');
+      setTimeout(() => setNotification(null), 3000);
     }
   };
 
@@ -271,24 +438,12 @@ const Dashboard = () => {
             <RefreshCw size={16} className={refreshing ? 'spinning' : ''} />
             {refreshing ? 'Refreshing...' : 'Refresh'}
           </button>
-          <button className="btn-primary">
+          <button 
+            className="btn-primary"
+            onClick={() => navigate('/')}
+          >
             <Plus size={16} />
             New Bill
-          </button>
-          <button 
-            className="btn-secondary" 
-            onClick={() => setShowDebug(!showDebug)}
-            title="Toggle Debug Mode"
-          >
-            Debug
-          </button>
-          <button 
-            className="btn-secondary" 
-            onClick={fixIDFCBills}
-            title="Fix IDFC Bills"
-            disabled={refreshing}
-          >
-            Fix IDFC
           </button>
         </div>
       </div>
@@ -335,24 +490,94 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Disk Space Card */}
+        {/* MongoDB Storage Card */}
         <div className="card" style={{ cursor: 'pointer' }} onClick={() => setShowStorageModal(true)}>
           <div className="card-icon">
-            <FileText color="#059669" />
+            <HardDrive color={
+              diskSpace ? 
+                (diskSpace.usagePercentage > 80 ? '#dc2626' : 
+                 diskSpace.usagePercentage > 60 ? '#f59e0b' : '#059669') 
+                : '#059669'
+            } />
           </div>
           <div className="card-content">
             <h3>{diskSpace ? `${diskSpace.usagePercentage}%` : '--'}</h3>
-            <p>Disk Usage</p>
+            <p>MongoDB Storage</p>
             {diskSpace && (
-              <small style={{ color: diskSpace.usagePercentage > 80 ? '#dc2626' : '#059669' }}>
-                {diskSpace.freeSpace > 1073741824 
-                  ? `${(diskSpace.freeSpace / 1073741824).toFixed(1)}GB free`
-                  : `${(diskSpace.freeSpace / 1048576).toFixed(1)}MB free`
-                }
-              </small>
+              <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                <div style={{ 
+                  color: diskSpace.usagePercentage > 80 ? '#dc2626' : 
+                         diskSpace.usagePercentage > 60 ? '#f59e0b' : '#059669', 
+                  marginBottom: '2px',
+                  fontWeight: '500'
+                }}>
+                  {diskSpace.freeSpace > 1073741824 
+                    ? `${(diskSpace.freeSpace / 1073741824).toFixed(1)}GB free`
+                    : `${(diskSpace.freeSpace / 1048576).toFixed(1)}MB free`
+                  }
+                </div>
+                <div style={{ color: '#6b7280', fontSize: '11px' }}>
+                  {diskSpace.actualBillCount || 0} bills stored
+                </div>
+                <div style={{ color: '#6b7280', fontSize: '11px' }}>
+                  ~{diskSpace.estimatedBillsCapacity?.toLocaleString() || 0} more bills possible
+                </div>
+                <div style={{ color: '#6b7280', fontSize: '10px', marginTop: '2px' }}>
+                  512MB total storage
+                </div>
+                <div style={{ 
+                  color: diskSpace.usagePercentage > 80 ? '#dc2626' : 
+                         diskSpace.usagePercentage > 60 ? '#f59e0b' : '#059669',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  marginTop: '2px'
+                }}>
+                  {diskSpace.usagePercentage > 80 ? '⚠️ Critical' : 
+                   diskSpace.usagePercentage > 60 ? '⚠️ Warning' : '✅ Healthy'}
+                </div>
+              </div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* Export Data Button */}
+      <div style={{ 
+        marginBottom: '24px', 
+        display: 'flex', 
+        justifyContent: 'center' 
+      }}>
+        <button
+          onClick={handleExportData}
+          style={{
+            padding: '12px 24px',
+            background: '#059669',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '16px',
+            fontWeight: '500',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#047857';
+            e.target.style.transform = 'translateY(-1px)';
+            e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = '#059669';
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+          }}
+        >
+          <Download size={20} />
+          Export Data to Excel
+        </button>
       </div>
 
       {/* Search and Filters */}
@@ -397,12 +622,15 @@ const Dashboard = () => {
                   value={filters.manufacturer}
                   onChange={(e) => handleFilterChange('manufacturer', e.target.value)}
                 />
-                <input
-                  type="text"
-                  placeholder="Asset Category"
+                <select
                   value={filters.assetCategory}
                   onChange={(e) => handleFilterChange('assetCategory', e.target.value)}
-                />
+                >
+                  <option value="">All Companies</option>
+                  <option value="Chola">Chola</option>
+                  <option value="IDFC">IDFC</option>
+                  <option value="HDB">HDB</option>
+                </select>
               </div>
               <div className="filter-row">
                 <select
@@ -459,72 +687,160 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {bills.map((bill) => (
-                  <tr key={bill._id}>
-                    <td>{bill.invoiceNumber}</td>
-                    <td>
-                      <div className="customer-info">
-                        <strong>{bill.customerName}</strong>
-                        <small>{bill.customerAddress}</small>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="product-info">
-                        <strong>{bill.manufacturer} {bill.assetCategory}</strong>
-                        <small>Model: {bill.model}</small>
-                      </div>
-                    </td>
-                    <td>
-                      <strong>{formatCurrency(bill.assetCost)}</strong>
-                    </td>
-                    <td>{formatDate(bill.createdAt)}</td>
-                    <td>
-                      <span 
-                        className="status-badge"
-                        style={{ backgroundColor: getStatusColor(bill.status) }}
-                      >
-                        {bill.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="action-buttons">
-                        <button
-                          className="action-btn view"
-                          onClick={() => {
-                            setSelectedBill(bill);
-                            setShowBillModal(true);
-                          }}
-                          title="View Details"
+                {bills.length > 0 ? (
+                  bills.map((bill) => (
+                    <tr key={bill._id}>
+                      <td>{bill.invoiceNumber}</td>
+                      <td>
+                        <div className="customer-info">
+                          <strong>{bill.customerName}</strong>
+                          <small>{bill.customerAddress}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="product-info">
+                          <strong>{bill.manufacturer} ({bill.assetCategory})</strong>
+                          <small>Model: {bill.model}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <strong>{formatCurrency(bill.assetCost)}</strong>
+                      </td>
+                      <td>{formatDate(bill.createdAt)}</td>
+                      <td>
+                        <span 
+                          className="status-badge"
+                          style={{ backgroundColor: getStatusColor(bill.status) }}
                         >
-                          <Eye size={14} />
-                          <span>View</span>
-                        </button>
-                        <button
-                          className="action-btn edit"
-                          title="Edit Bill"
-                        >
-                          <Edit size={14} />
-                          <span>Edit</span>
-                        </button>
-                        <button
-                          className="action-btn download"
-                          title="Download PDF"
-                        >
-                          <Download size={14} />
-                          <span>Download</span>
-                        </button>
-                        <button
-                          className="action-btn delete"
-                          onClick={() => handleDeleteBill(bill._id)}
-                          title="Delete Bill"
-                        >
-                          <Trash2 size={14} />
-                          <span>Delete</span>
-                        </button>
+                          {bill.status}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="action-buttons" style={{
+                          display: 'flex',
+                          gap: '6px',
+                          justifyContent: 'center'
+                        }}>
+                          <button
+                            onClick={() => handleEditBill(bill)}
+                            title="Edit Bill"
+                            style={{
+                              padding: '8px 12px',
+                              border: 'none',
+                              borderRadius: '6px',
+                              background: '#2563eb',
+                              color: 'white',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              transition: 'all 0.2s ease',
+                              minWidth: '70px',
+                              justifyContent: 'center',
+                              fontWeight: '500'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.background = '#1d4ed8';
+                              e.target.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.background = '#2563eb';
+                              e.target.style.transform = 'translateY(0)';
+                            }}
+                          >
+                            <Edit size={14} />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleDownloadBill(bill)}
+                            title="Download PDF"
+                            style={{
+                              padding: '8px 12px',
+                              border: 'none',
+                              borderRadius: '6px',
+                              background: '#059669',
+                              color: 'white',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              transition: 'all 0.2s ease',
+                              minWidth: '70px',
+                              justifyContent: 'center',
+                              fontWeight: '500'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.background = '#047857';
+                              e.target.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.background = '#059669';
+                              e.target.style.transform = 'translateY(0)';
+                            }}
+                          >
+                            <Download size={14} />
+                            <span>Download</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBill(bill._id)}
+                            title="Delete Bill"
+                            style={{
+                              padding: '8px 12px',
+                              border: 'none',
+                              borderRadius: '6px',
+                              background: '#dc2626',
+                              color: 'white',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              transition: 'all 0.2s ease',
+                              minWidth: '70px',
+                              justifyContent: 'center',
+                              fontWeight: '500'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.background = '#b91c1c';
+                              e.target.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.background = '#dc2626';
+                              e.target.style.transform = 'translateY(0)';
+                            }}
+                          >
+                            <Trash2 size={14} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '40px 20px' }}>
+                      <div style={{ 
+                        color: '#6b7280', 
+                        fontSize: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <FileText size={48} color="#9ca3af" />
+                        <p style={{ margin: 0, fontWeight: '500' }}>No bills found</p>
+                        <p style={{ margin: 0, fontSize: '14px', color: '#9ca3af' }}>
+                          {Object.values(filters).some(val => val) 
+                            ? 'No bills match your current filters. Try adjusting your search criteria.'
+                            : 'No bills have been created yet.'
+                          }
+                        </p>
                       </div>
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -576,7 +892,7 @@ const Dashboard = () => {
                 </div>
                 <div className="detail-row">
                   <strong>Product:</strong>
-                  <span>{selectedBill.manufacturer} {selectedBill.assetCategory}</span>
+                                          <span>{selectedBill.manufacturer} ({selectedBill.assetCategory})</span>
                 </div>
                 <div className="detail-row">
                   <strong>Model:</strong>
@@ -621,33 +937,75 @@ const Dashboard = () => {
             
             {diskSpace && (
               <div style={{ marginBottom: '24px' }}>
-                <h3>Disk Space Status</h3>
+                <h3>MongoDB Atlas Storage Status</h3>
                 <div style={{ 
                   background: '#f8fafc', 
                   padding: '16px', 
                   borderRadius: '8px',
                   marginBottom: '16px'
                 }}>
-                  <p><strong>Drive:</strong> {diskSpace.drive}</p>
-                  <p><strong>Usage:</strong> {diskSpace.usagePercentage}%</p>
-                  <p><strong>Free Space:</strong> {
-                    diskSpace.freeSpace > 1073741824 
-                      ? `${(diskSpace.freeSpace / 1073741824).toFixed(1)}GB`
-                      : `${(diskSpace.freeSpace / 1048576).toFixed(1)}MB`
-                  }</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                    <div>
+                      <p><strong>Storage Type:</strong> {diskSpace.storageType}</p>
+                      <p><strong>Usage:</strong> {diskSpace.usagePercentage}%</p>
+                      <p><strong>Total Space:</strong> {
+                        diskSpace.totalSpace > 1073741824 
+                          ? `${(diskSpace.totalSpace / 1073741824).toFixed(1)}GB`
+                          : `${(diskSpace.totalSpace / 1048576).toFixed(1)}MB`
+                      }</p>
+                      <p><strong>Used Space:</strong> {
+                        diskSpace.usedSpace > 1073741824 
+                          ? `${(diskSpace.usedSpace / 1073741824).toFixed(1)}GB`
+                          : `${(diskSpace.usedSpace / 1048576).toFixed(1)}MB`
+                      }</p>
+                      <p><strong>Free Space:</strong> {
+                        diskSpace.freeSpace > 1073741824 
+                          ? `${(diskSpace.freeSpace / 1073741824).toFixed(1)}GB`
+                          : `${(diskSpace.freeSpace / 1048576).toFixed(1)}MB`
+                      }</p>
+                    </div>
+                    <div>
+                      <p><strong>Bills Stored:</strong> {diskSpace.actualBillCount?.toLocaleString() || 0}</p>
+                      <p><strong>More Bills Possible:</strong> {diskSpace.estimatedBillsCapacity?.toLocaleString() || 0}</p>
+                      <p><strong>Avg Bill Size:</strong> {(diskSpace.averageBillSize / 1024).toFixed(0)}KB</p>
+                      <p><strong>Status:</strong> 
+                        <span style={{ 
+                          color: diskSpace.usagePercentage > 80 ? '#dc2626' : 
+                                 diskSpace.usagePercentage > 60 ? '#f59e0b' : '#059669',
+                          fontWeight: 'bold'
+                        }}>
+                          {diskSpace.usagePercentage > 80 ? 'Critical' : 
+                           diskSpace.usagePercentage > 60 ? 'Warning' : 'Healthy'}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                  
                   <div style={{
                     width: '100%',
-                    height: '8px',
+                    height: '12px',
                     background: '#e2e8f0',
-                    borderRadius: '4px',
-                    overflow: 'hidden'
+                    borderRadius: '6px',
+                    overflow: 'hidden',
+                    marginBottom: '8px'
                   }}>
                     <div style={{
                       width: `${diskSpace.usagePercentage}%`,
                       height: '100%',
-                      background: diskSpace.usagePercentage > 80 ? '#dc2626' : '#059669',
+                      background: diskSpace.usagePercentage > 80 ? '#dc2626' : 
+                                 diskSpace.usagePercentage > 60 ? '#f59e0b' : '#059669',
                       transition: 'width 0.3s ease'
                     }}></div>
+                  </div>
+                  
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#6b7280',
+                    textAlign: 'center' 
+                  }}>
+                    {diskSpace.usagePercentage > 80 ? '⚠️ Critical: Consider upgrading to paid plan or cleaning old bills' :
+                     diskSpace.usagePercentage > 60 ? '⚠️ Warning: Monitor storage usage closely' :
+                     '✅ Healthy: Plenty of space available for more bills'}
                   </div>
                 </div>
               </div>
@@ -713,19 +1071,444 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Debug Panel */}
-      {showDebug && (
-        <div className="debug-panel">
-          <h3>Debug Information</h3>
-          <div className="debug-content">
-            <p><strong>API Base URL:</strong> {API_BASE_URL}</p>
-            <p><strong>Current Page:</strong> {currentPage}</p>
-            <p><strong>Total Pages:</strong> {totalPages}</p>
-            <p><strong>Bills Count:</strong> {bills.length}</p>
-            <p><strong>Loading:</strong> {loading ? 'Yes' : 'No'}</p>
-            <p><strong>Refreshing:</strong> {refreshing ? 'Yes' : 'No'}</p>
-            <p><strong>Filters:</strong> {JSON.stringify(filters)}</p>
-            <p><strong>Analytics:</strong> {JSON.stringify(analytics)}</p>
+
+
+      {/* Edit Bill Modal */}
+      {showEditModal && editingBill && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '24px',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '700px',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '24px',
+              borderBottom: '1px solid #e5e7eb',
+              paddingBottom: '16px'
+            }}>
+              <h2 style={{ margin: 0, color: '#1f2937', fontSize: '24px' }}>Edit Bill - {editingBill.invoiceNumber}</h2>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingBill(null);
+                  setEditFormData({});
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#666',
+                  padding: '4px',
+                  borderRadius: '4px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = '#f3f4f6';
+                  e.target.style.color = '#374151';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'none';
+                  e.target.style.color = '#666';
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              console.log('🚀 Form submitted!');
+              console.log('🚀 Event:', e);
+              console.log('🚀 Form data:', editFormData);
+              console.log('🚀 Editing bill ID:', editingBill._id);
+              console.log('🚀 API URL:', `${API_BASE_URL}/bills/${editingBill._id}`);
+              
+              try {
+                console.log('🔍 Submitting edit form with data:', editFormData);
+                console.log('🔍 API_BASE_URL:', API_BASE_URL);
+                console.log('🔍 Bill ID:', editingBill._id);
+                
+                // Validate required fields
+                if (!editFormData.customerName || !editFormData.assetCost) {
+                  console.log('❌ Validation failed - missing required fields');
+                  setNotification('Please fill in all required fields');
+                  setTimeout(() => setNotification(null), 3000);
+                  return;
+                }
+
+                console.log('🔍 Making PUT request to:', `${API_BASE_URL}/bills/${editingBill._id}`);
+                console.log('🔍 Request headers:', { 
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                });
+                console.log('🔍 Request body:', JSON.stringify(editFormData, null, 2));
+
+                const response = await fetch(`${API_BASE_URL}/bills/${editingBill._id}`, {
+                  method: 'PUT',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                  },
+                  body: JSON.stringify(editFormData)
+                });
+
+                console.log('🔍 Response status:', response.status);
+                console.log('🔍 Response headers:', response.headers);
+                console.log('🔍 Response ok:', response.ok);
+                
+                let responseData;
+                const responseText = await response.text();
+                console.log('🔍 Raw response text:', responseText);
+                
+                try {
+                  responseData = JSON.parse(responseText);
+                  console.log('🔍 Parsed response data:', responseData);
+                } catch (parseError) {
+                  console.error('❌ Failed to parse response as JSON:', parseError);
+                  console.error('❌ Raw response that failed to parse:', responseText);
+                  responseData = { message: 'Invalid response format' };
+                }
+
+                if (response.ok) {
+                  console.log('✅ Bill updated successfully!');
+                  setNotification('✅ Bill updated successfully!');
+                  setShowEditModal(false);
+                  setEditingBill(null);
+                  setEditFormData({});
+                  
+                  // Refresh the bills list
+                  await fetchBills(currentPage, filters);
+                  await fetchAnalytics();
+                } else {
+                  console.error('❌ Failed to update bill:', responseData);
+                  setNotification(`❌ Failed to update bill: ${responseData.message || 'Unknown error'}`);
+                }
+                setTimeout(() => setNotification(null), 3000);
+              } catch (error) {
+                console.error('❌ Error updating bill:', error);
+                console.error('❌ Error stack:', error.stack);
+                setNotification(`❌ Error updating bill: ${error.message}`);
+                setTimeout(() => setNotification(null), 3000);
+              }
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Customer Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.customerName}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, customerName: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#2563eb';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#d1d5db';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Customer Address *
+                  </label>
+                  <textarea
+                    value={editFormData.customerAddress}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, customerAddress: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease',
+                      resize: 'vertical',
+                      minHeight: '80px'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#2563eb';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#d1d5db';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Manufacturer *
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.manufacturer}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, manufacturer: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#2563eb';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#d1d5db';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Company *
+                  </label>
+                  <select
+                    value={editFormData.assetCategory}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, assetCategory: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease',
+                      backgroundColor: 'white'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#2563eb';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#d1d5db';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                    required
+                  >
+                    <option value="">Select Company</option>
+                    <option value="Chola">Chola</option>
+                    <option value="IDFC">IDFC</option>
+                    <option value="HDB">HDB</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Model *
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.model}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, model: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#2563eb';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#d1d5db';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    IMEI/Serial Number
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.imeiSerialNumber}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, imeiSerialNumber: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#2563eb';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#d1d5db';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#374151' }}>
+                    Asset Cost (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    value={editFormData.assetCost}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, assetCost: parseFloat(e.target.value) || 0 }))}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = '#2563eb';
+                      e.target.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '#d1d5db';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                    required
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px',
+                  padding: '12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  backgroundColor: '#f9fafb'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={editFormData.hdbFinance}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, hdbFinance: e.target.checked }))}
+                    style={{ 
+                      width: '18px', 
+                      height: '18px',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <label style={{ 
+                    margin: 0, 
+                    fontWeight: '600', 
+                    color: '#374151',
+                    cursor: 'pointer'
+                  }}>
+                    Finance by HDBFS
+                  </label>
+                </div>
+              </div>
+
+              <div style={{
+                display: 'flex',
+                gap: '12px',
+                justifyContent: 'flex-end',
+                marginTop: '32px',
+                paddingTop: '20px',
+                borderTop: '1px solid #e5e7eb'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingBill(null);
+                    setEditFormData({});
+                  }}
+                  style={{
+                    padding: '12px 24px',
+                    background: '#6b7280',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = '#4b5563';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = '#6b7280';
+                    e.target.style.transform = 'translateY(0)';
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '12px 24px',
+                    background: '#2563eb',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = '#1d4ed8';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = '#2563eb';
+                    e.target.style.transform = 'translateY(0)';
+                  }}
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

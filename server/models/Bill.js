@@ -200,10 +200,28 @@ billSchema.statics.getBillsWithFilters = async function(filters = {}, page = 1, 
   if (filters.dateFrom || filters.dateTo) {
     query.createdAt = {};
     if (filters.dateFrom) {
-      query.createdAt.$gte = new Date(filters.dateFrom);
+      // If only dateFrom is provided, filter for that specific day
+      if (!filters.dateTo) {
+        const startOfDay = new Date(filters.dateFrom);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(filters.dateFrom);
+        endOfDay.setHours(23, 59, 59, 999);
+        query.createdAt.$gte = startOfDay;
+        query.createdAt.$lte = endOfDay;
+      } else {
+        query.createdAt.$gte = new Date(filters.dateFrom);
+      }
     }
-    if (filters.dateTo) {
-      query.createdAt.$lte = new Date(filters.dateTo);
+    if (filters.dateTo && filters.dateFrom) {
+      // If both dates are provided, create a range
+      const endOfDay = new Date(filters.dateTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      query.createdAt.$lte = endOfDay;
+    } else if (filters.dateTo && !filters.dateFrom) {
+      // If only dateTo is provided, filter from beginning to that day
+      const endOfDay = new Date(filters.dateTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      query.createdAt.$lte = endOfDay;
     }
   }
 
