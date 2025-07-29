@@ -70,12 +70,13 @@ const AdminDashboard = () => {
           >
             Dashboard
           </button>
-          <button 
+          {/* Analytics button hidden */}
+          {/* <button 
             className={`nav-btn ${currentView === 'analytics' ? 'active' : ''}`}
             onClick={() => setCurrentView('analytics')}
           >
             Analytics
-          </button>
+          </button> */}
           <button 
             className="nav-btn logout"
             onClick={() => {
@@ -243,8 +244,6 @@ const BillGenerator = () => {
       let serialNumber = '';
       let assetCost = 0;
       let hdbFinance = false;
-      let detectedCompany = '';
-
       if (isHDBDoc) {
         hdbFinance = true;
         const customerMatch = fullText.match(/to our Customer\s+(.+?)\s+\. Pursuant/i);
@@ -282,7 +281,6 @@ const BillGenerator = () => {
         }
         
         assetCategory = 'Electronics';
-        detectedCompany = 'HDB';
       } else if (isIDFCBankDoc) {
         const customerMatch = fullText.match(/loan application of (.+?) has been approved for/i);
         customerName = customerMatch ? `${customerMatch[1].trim()} [IDFC FIRST BANK]` : '';
@@ -314,6 +312,9 @@ const BillGenerator = () => {
         
           manufacturer = '';
         
+        // Improved address extraction for IDFC bills
+        let idfcAddressExtracted = false;
+        // 1. Try the current method (after the known paragraph)
         const para = "The required formalities with the customer have been completed and hence we request you to collect the down payment and only deliver the product at the following address post device validation is completed and final DA is received.";
         const paraIdx = fullText.indexOf(para);
         if (paraIdx !== -1) {
@@ -321,47 +322,77 @@ const BillGenerator = () => {
           const addressIdx = afterPara.search(/Customer Address[:]?/i);
           if (addressIdx !== -1) {
             const afterAddress = afterPara.slice(addressIdx + 'Customer Address:'.length);
-            const thankingIdx = afterAddress.search(/Thanking you/i);
-            if (thankingIdx !== -1) {
-              customerAddress = afterAddress.slice(0, thankingIdx).trim();
+            // Try to end at 'Thanking you', 'Contact', or double newline
+            const endIdx = afterAddress.search(/(Thanking you|Contact|\n\n|$)/i);
+            if (endIdx !== -1) {
+              customerAddress = afterAddress.slice(0, endIdx).trim();
             } else {
               customerAddress = afterAddress.trim();
             }
+            idfcAddressExtracted = !!customerAddress;
           }
         }
-        
-        // Improved model extraction for IDFC bills
-        const modelMatch = fullText.match(/Model Number:?[ \t]*([^\n\r]+?)(?=\s*(?:Scheme Name|Serial Number|Asset Category|Asset Cost|\n|\r|$))/i);
-        if (modelMatch) {
+        // 2. Fallback: Try direct regex for Customer Address
+        if (!idfcAddressExtracted) {
+          const addrMatch = fullText.match(/Customer Address:?\s*([\s\S]*?)(?:Thanking you|Contact|\n\n|$)/i);
+          if (addrMatch && addrMatch[1]) {
+            customerAddress = addrMatch[1].replace(/\s+/g, ' ').trim();
+            idfcAddressExtracted = !!customerAddress;
+          }
+        }
+        // 3. Fallback: Try generic Address
+        if (!idfcAddressExtracted) {
+          const addrMatch = fullText.match(/Address:?\s*([\s\S]*?)(?:Thanking you|Contact|\n\n|$)/i);
+          if (addrMatch && addrMatch[1]) {
+            customerAddress = addrMatch[1].replace(/\s+/g, ' ').trim();
+            idfcAddressExtracted = !!customerAddress;
+          }
+        }
+        // 4. Debug log if still not found
+        if (!idfcAddressExtracted) {
+          console.warn('IDFC Address extraction failed. PDF text snippet:', fullText.slice(0, 1000));
+        }
+
+        // Improved model extraction for IDFC bills (robust, independent)
+        let idfcModelExtracted = false;
+        // 1. Try main regex
+        let modelMatch = fullText.match(/Model Number:?[ \t]*([^\n\r]+?)(?=\s*(?:Scheme Name|Serial Number|Asset Category|Asset Cost|\n|\r|$))/i);
+        if (modelMatch && modelMatch[1]) {
           model = modelMatch[1].trim();
-          // Clean up any trailing 'E' that might be included
-          if (model.endsWith('E')) {
-            model = model.slice(0, -1).trim();
-          }
-        } else {
-          // Fallback: try to find model between "Model Number" and the next field
+          if (model.endsWith('E')) model = model.slice(0, -1).trim();
+          idfcModelExtracted = !!model;
+        }
+        // 2. Fallback: Find between Model Number and next field
+        if (!idfcModelExtracted) {
           const modelStartIndex = fullText.indexOf('Model Number');
-          const schemeStartIndex = fullText.indexOf('Scheme Name', modelStartIndex);
-          const serialStartIndex = fullText.indexOf('Serial Number', modelStartIndex);
-          
+          const nextFields = ['Scheme Name', 'Serial Number', 'Asset Category', 'Asset Cost', '\n', '\r'];
           let modelEndIndex = -1;
-          if (schemeStartIndex !== -1 && serialStartIndex !== -1) {
-            modelEndIndex = Math.min(schemeStartIndex, serialStartIndex);
-          } else if (schemeStartIndex !== -1) {
-            modelEndIndex = schemeStartIndex;
-          } else if (serialStartIndex !== -1) {
-            modelEndIndex = serialStartIndex;
+          for (let field of nextFields) {
+            const idx = fullText.indexOf(field, modelStartIndex + 1);
+            if (idx !== -1 && (modelEndIndex === -1 || idx < modelEndIndex)) {
+              modelEndIndex = idx;
+            }
           }
-          
           if (modelStartIndex !== -1 && modelEndIndex !== -1 && modelEndIndex > modelStartIndex) {
             const textStartIndex = modelStartIndex + 'Model Number'.length;
             const rawExtractedText = fullText.substring(textStartIndex, modelEndIndex);
             model = rawExtractedText.trim();
-            // Clean up any trailing 'E' that might be included
-            if (model.endsWith('E')) {
-              model = model.slice(0, -1).trim();
-            }
+            if (model.endsWith('E')) model = model.slice(0, -1).trim();
+            idfcModelExtracted = !!model;
           }
+        }
+        // 3. Fallback: Try generic Model:
+        if (!idfcModelExtracted) {
+          const genericModelMatch = fullText.match(/Model:?\s*([^\n\r]+?)(?=\s*(?:Scheme Name|Serial Number|Asset Category|Asset Cost|\n|\r|$))/i);
+          if (genericModelMatch && genericModelMatch[1]) {
+            model = genericModelMatch[1].trim();
+            if (model.endsWith('E')) model = model.slice(0, -1).trim();
+            idfcModelExtracted = !!model;
+          }
+        }
+        // 4. Debug log if still not found
+        if (!idfcModelExtracted) {
+          console.warn('IDFC Model extraction failed. PDF text snippet:', fullText.slice(0, 1000));
         }
         
         const serialNumberMatch = fullText.match(/Serial Number:?[ \t]*([^ \t\n]+)/i);
@@ -371,7 +402,6 @@ const BillGenerator = () => {
         if (assetCostMatch) {
           assetCost = parseFloat(assetCostMatch[1].replace(/[^0-9.]/g, ''));
         }
-        detectedCompany = 'IDFC';
       } else if (isCholaDoc) {
         const customerMatch = fullText.match(/Customer Name:?[ \t]*([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i);
         customerName = customerMatch ? customerMatch[1].trim() : '';
@@ -398,7 +428,6 @@ const BillGenerator = () => {
         if (assetCostMatch) {
           assetCost = parseFloat(assetCostMatch[1].replace(/[^0-9.]/g, ''));
         }
-        detectedCompany = 'Chola';
       } else {
         const customerMatch = fullText.match(/Customer Name:?[ \t]*([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i);
         customerName = customerMatch ? customerMatch[1].trim() : '';
@@ -425,20 +454,18 @@ const BillGenerator = () => {
         if (assetCostMatch) {
           assetCost = parseFloat(assetCostMatch[1].replace(/[^0-9.]/g, ''));
         }
-        detectedCompany = 'Other';
       }
 
       const extractedData = {
         customerName,
         customerAddress,
         manufacturer,
-        assetCategory: detectedCompany, // Use detected company as assetCategory
+        assetCategory,
         model,
         imeiSerialNumber: serialNumber,
         date: new Date().toISOString().split('T')[0],
         assetCost,
-        hdbFinance,
-        detectedCompany
+        hdbFinance
       };
 
       // Debug logging for IDFC bills
@@ -479,7 +506,7 @@ const BillGenerator = () => {
         customerName: data.customerName || 'Unknown Customer',
         customerAddress: data.customerAddress || 'No Address',
         manufacturer: data.manufacturer || 'Unknown Manufacturer',
-        assetCategory: data.assetCategory || 'Other', // Use detected company
+        assetCategory: data.assetCategory || 'Other',
         model: data.model || 'Unknown Model',
         imeiSerialNumber: data.imeiSerialNumber || '',
         assetCost: data.assetCost || 0,
@@ -843,12 +870,12 @@ const BillGenerator = () => {
             </h2>
             <div className="info-card">
               <div><strong>Customer Name:</strong> {extractedData.customerName}</div>
-              <div><strong>Manufacturer:</strong> {extractedData.manufacturer}</div>
+              {/* Manufacturer field hidden */}
               <div className="full"><strong>Customer Address:</strong> {extractedData.customerAddress}</div>
               <div><strong>Model:</strong> {extractedData.model}</div>
               <div><strong>Serial Number:</strong> {extractedData.imeiSerialNumber}</div>
               <div><strong>Asset Cost:</strong> ₹{extractedData.assetCost.toFixed(2)}</div>
-              <div><strong>Detected Company:</strong> {extractedData.detectedCompany || 'Unknown'}</div>
+              <div><strong>Asset Category:</strong> {extractedData.assetCategory || 'Unknown'}</div>
             </div>
 
             <div style={{ marginTop: 32 }}>
