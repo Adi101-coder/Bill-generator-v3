@@ -308,6 +308,144 @@ router.get('/test', (req, res) => {
   });
 });
 
+// Test PDF generation endpoint
+router.post('/test-pdf', async (req, res) => {
+  try {
+    console.log('🔍 POST /test-pdf - Test PDF generation called');
+    
+    // Create a test bill object
+    const testBill = {
+      invoiceNumber: 'TEST001',
+      customerName: 'Test Customer',
+      customerAddress: 'Test Address, Test City',
+      manufacturer: 'Test Manufacturer',
+      assetCategory: 'Electronics',
+      model: 'Test Model',
+      imeiSerialNumber: 'TEST123456',
+      assetCost: 10000,
+      hdbFinance: false,
+      createdAt: new Date()
+    };
+
+    console.log('🔍 Test bill data:', testBill);
+
+    // Create uploads directory if it doesn't exist
+    const uploadsDir = path.join(__dirname, '..', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      console.log('🔍 Creating uploads directory:', uploadsDir);
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    // Generate test PDF filename
+    const pdfFilename = `test_${Date.now()}.pdf`;
+    const pdfPath = path.join(uploadsDir, pdfFilename);
+    
+    console.log('🔍 Test PDF will be saved to:', pdfPath);
+
+    // Generate HTML for the test bill
+    const htmlContent = generateBillHTML(testBill);
+    console.log('🔍 HTML content generated, length:', htmlContent.length);
+
+    // Generate PDF using Puppeteer
+    console.log('🔍 Launching Puppeteer browser...');
+    
+    let browser;
+    try {
+      browser = await puppeteer.launch({ 
+        headless: true,
+        args: [
+          '--no-sandbox', 
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-field-trial-config',
+          '--disable-ipc-flooding-protection',
+          '--enable-logging',
+          '--log-level=0',
+          '--silent-launch'
+        ]
+      });
+      
+      console.log('🔍 Browser launched, creating new page...');
+      const page = await browser.newPage();
+      
+      // Set viewport for consistent rendering
+      await page.setViewport({ width: 1200, height: 800 });
+      
+      console.log('🔍 Setting HTML content...');
+      await page.setContent(htmlContent, { 
+        waitUntil: 'networkidle0',
+        timeout: 30000 
+      });
+      
+      // Wait a bit for any dynamic content to render
+      await page.waitForTimeout(1000);
+      
+      console.log('🔍 Generating PDF...');
+      await page.pdf({
+        path: pdfPath,
+        format: 'A4',
+        margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
+        printBackground: true,
+        preferCSSPageSize: true,
+        displayHeaderFooter: false,
+        scale: 1.0,
+        landscape: false
+      });
+      
+      console.log('🔍 PDF generated, closing browser...');
+      await browser.close();
+      
+    } catch (puppeteerError) {
+      console.error('❌ Puppeteer failed:', puppeteerError);
+      await browser?.close();
+      return res.status(500).json({
+        success: false,
+        message: 'PDF generation failed',
+        error: puppeteerError.message
+      });
+    }
+
+    console.log('🔍 PDF saved to:', pdfPath);
+    console.log('🔍 Checking if file exists:', fs.existsSync(pdfPath));
+
+    // Verify the PDF file is valid
+    const stats = fs.statSync(pdfPath);
+    console.log('🔍 PDF file size:', stats.size, 'bytes');
+    
+    if (stats.size === 0) {
+      return res.status(500).json({
+        success: false,
+        message: 'Generated PDF file is empty'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Test PDF generated successfully',
+      pdfPath: `uploads/${pdfFilename}`,
+      fileSize: stats.size
+    });
+
+  } catch (error) {
+    console.error('❌ Error in test PDF generation:', error);
+    console.error('❌ Error stack:', error.stack);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error generating test PDF',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'PDF generation failed'
+    });
+  }
+});
+
 // Test PUT endpoint
 router.put('/test-put', (req, res) => {
   console.log('🔍 PUT /test-put - Test PUT endpoint called');
@@ -1090,7 +1228,7 @@ router.post('/:id/generate-pdf', async (req, res) => {
     const htmlContent = generateBillHTML(bill);
     console.log('HTML content generated, length:', htmlContent.length);
 
-    // Generate PDF using Puppeteer with better error handling
+    // Generate PDF using Puppeteer with improved configuration
     console.log('Launching Puppeteer browser...');
     
     let browser;
@@ -1106,15 +1244,32 @@ router.post('/:id/generate-pdf', async (req, res) => {
           '--no-zygote',
           '--single-process',
           '--disable-web-security',
-          '--disable-features=VizDisplayCompositor'
+          '--disable-features=VizDisplayCompositor',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-field-trial-config',
+          '--disable-ipc-flooding-protection',
+          '--enable-logging',
+          '--log-level=0',
+          '--silent-launch'
         ]
       });
       
       console.log('Browser launched, creating new page...');
       const page = await browser.newPage();
       
+      // Set viewport for consistent rendering
+      await page.setViewport({ width: 1200, height: 800 });
+      
       console.log('Setting HTML content...');
-      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+      await page.setContent(htmlContent, { 
+        waitUntil: 'networkidle0',
+        timeout: 30000 
+      });
+      
+      // Wait a bit for any dynamic content to render
+      await page.waitForTimeout(1000);
       
       console.log('Generating PDF...');
       await page.pdf({
@@ -1123,7 +1278,9 @@ router.post('/:id/generate-pdf', async (req, res) => {
         margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
         printBackground: true,
         preferCSSPageSize: true,
-        displayHeaderFooter: false
+        displayHeaderFooter: false,
+        scale: 1.0,
+        landscape: false
       });
       
       console.log('PDF generated, closing browser...');
@@ -1154,6 +1311,14 @@ router.post('/:id/generate-pdf', async (req, res) => {
 
     console.log('PDF saved to:', pdfPath);
     console.log('Checking if file exists:', fs.existsSync(pdfPath));
+
+    // Verify the PDF file is valid
+    const stats = fs.statSync(pdfPath);
+    console.log('PDF file size:', stats.size, 'bytes');
+    
+    if (stats.size === 0) {
+      throw new Error('Generated PDF file is empty');
+    }
 
     // Update bill with PDF path
     await Bill.findByIdAndUpdate(bill._id, {
@@ -1201,17 +1366,43 @@ router.get('/:id/download', async (req, res) => {
       return res.status(404).json({ success: false, message: 'PDF file not found' });
     }
 
+    // Check if file is empty
+    const stats = fs.statSync(pdfPath);
+    if (stats.size === 0) {
+      return res.status(404).json({ success: false, message: 'PDF file is empty' });
+    }
+
     // Set headers for file download
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${bill.invoiceNumber}.pdf"`);
+    res.setHeader('Content-Length', stats.size);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     
     // Stream the file
     const fileStream = fs.createReadStream(pdfPath);
+    
+    // Handle stream errors
+    fileStream.on('error', (error) => {
+      console.error('Error streaming PDF file:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: 'Error streaming PDF file' });
+      }
+    });
+    
+    // Handle client disconnect
+    req.on('close', () => {
+      fileStream.destroy();
+    });
+    
     fileStream.pipe(res);
     
   } catch (error) {
     console.error('Error downloading bill:', error);
-    res.status(500).json({ success: false, message: 'Error downloading bill' });
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: 'Error downloading bill' });
+    }
   }
 });
 
