@@ -19,7 +19,7 @@ const AdminLogin = ({ onLogin }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (password === 'admin123') {
+    if (password === 'katiyars1972') {
       localStorage.setItem('adminAuthenticated', 'true');
       onLogin(true);
     } else {
