@@ -274,33 +274,48 @@ const Dashboard = () => {
           throw new Error('Downloaded file is empty');
         }
         
-        // Open PDF directly in new tab
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
+        // Check content type to determine if it's PDF or HTML
+        const contentType = response.headers.get('content-type');
+        const isHTML = contentType && contentType.includes('text/html');
         
-        // Clean up after a delay
-        setTimeout(() => {
-          window.URL.revokeObjectURL(url);
-        }, 1000);
-        
-        setNotification('PDF opened in new tab');
-        setTimeout(() => setNotification(null), 3000);
+        if (isHTML) {
+          // For HTML files, create a new window with the HTML content
+          const text = await blob.text();
+          const newWindow = window.open('', '_blank');
+          newWindow.document.write(text);
+          newWindow.document.close();
+          
+          setNotification('HTML file opened in new tab');
+          setTimeout(() => setNotification(null), 3000);
+        } else {
+          // For PDF files, open directly
+          const url = window.URL.createObjectURL(blob);
+          window.open(url, '_blank');
+          
+          // Clean up after a delay
+          setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+          }, 1000);
+          
+          setNotification('PDF opened in new tab');
+          setTimeout(() => setNotification(null), 3000);
+        }
       } else {
         const errorData = await response.json();
         console.log('🔍 View failed:', errorData);
         
-        if (errorData.message === 'PDF not generated for this bill') {
-          // Try to generate PDF first
-          console.log('🔍 PDF not generated, attempting to generate...');
-          setNotification('Generating PDF...');
+        if (errorData.message === 'File not generated for this bill') {
+          // Try to generate file first
+          console.log('🔍 File not generated, attempting to generate...');
+          setNotification('Generating file...');
           
           const generateResponse = await fetch(`${API_BASE_URL}/bills/${bill._id}/generate-pdf`, {
             method: 'POST'
           });
           
           if (generateResponse.ok) {
-            console.log('🔍 PDF generated successfully, attempting to view...');
-            setNotification('PDF generated, opening...');
+            console.log('🔍 File generated successfully, attempting to view...');
+            setNotification('File generated, opening...');
             
             // Try viewing again
             const viewResponse = await fetch(`${API_BASE_URL}/bills/${bill._id}/download`);
@@ -312,29 +327,44 @@ const Dashboard = () => {
                 throw new Error('Downloaded file is empty');
               }
               
-              // Open PDF directly in new tab
-              const url = window.URL.createObjectURL(blob);
-              window.open(url, '_blank');
+              // Check content type
+              const contentType = viewResponse.headers.get('content-type');
+              const isHTML = contentType && contentType.includes('text/html');
               
-              // Clean up after a delay
-              setTimeout(() => {
-                window.URL.revokeObjectURL(url);
-              }, 1000);
-              
-              setNotification('PDF generated and opened in new tab');
-              setTimeout(() => setNotification(null), 3000);
+              if (isHTML) {
+                // For HTML files, create a new window with the HTML content
+                const text = await blob.text();
+                const newWindow = window.open('', '_blank');
+                newWindow.document.write(text);
+                newWindow.document.close();
+                
+                setNotification('HTML file generated and opened in new tab');
+                setTimeout(() => setNotification(null), 3000);
+              } else {
+                // For PDF files, open directly
+                const url = window.URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                
+                // Clean up after a delay
+                setTimeout(() => {
+                  window.URL.revokeObjectURL(url);
+                }, 1000);
+                
+                setNotification('PDF generated and opened in new tab');
+                setTimeout(() => setNotification(null), 3000);
+              }
             } else {
               const viewError = await viewResponse.json();
               console.error('❌ View failed after generation:', viewError);
-              alert(`Failed to view PDF after generation: ${viewError.message || 'Unknown error'}`);
+              alert(`Failed to view file after generation: ${viewError.message || 'Unknown error'}`);
             }
           } else {
             const errorData = await generateResponse.json();
-            console.error('❌ PDF generation failed:', errorData);
-            alert(`Failed to generate PDF: ${errorData.message || 'Unknown error'}`);
+            console.error('❌ File generation failed:', errorData);
+            alert(`Failed to generate file: ${errorData.message || 'Unknown error'}`);
           }
         } else {
-          alert(`Unable to view bill PDF: ${errorData.message || 'Unknown error'}`);
+          alert(`Unable to view bill file: ${errorData.message || 'Unknown error'}`);
         }
       }
     } catch (error) {
@@ -350,17 +380,20 @@ const Dashboard = () => {
       const response = await fetch(`${API_BASE_URL}/bills/${bill._id}/download`);
       
       if (response.ok) {
-        // Check if the response is actually a PDF
+        // Check the content type to determine file type
         const contentType = response.headers.get('content-type');
         console.log('🔍 Content-Type:', contentType);
         
-        if (!contentType || !contentType.includes('application/pdf')) {
-          console.warn('⚠️ Response is not a PDF, content-type:', contentType);
-          setNotification('Warning: Downloaded file may not be a valid PDF');
-          setTimeout(() => setNotification(null), 5000);
+        const isHTML = contentType && contentType.includes('text/html');
+        const fileExtension = isHTML ? 'html' : 'pdf';
+        
+        if (isHTML) {
+          console.log('⚠️ Response is HTML file, not PDF');
+          setNotification('Downloading HTML file');
+          setTimeout(() => setNotification(null), 3000);
         }
         
-        // Download the PDF file
+        // Download the file
         const blob = await response.blob();
         console.log('🔍 Blob size:', blob.size, 'bytes');
         
@@ -372,13 +405,21 @@ const Dashboard = () => {
         try {
           const url = window.URL.createObjectURL(blob);
           
-          // Open in new tab
-          const newWindow = window.open(url, '_blank');
+          if (isHTML) {
+            // For HTML files, open in new tab
+            const text = await blob.text();
+            const newWindow = window.open('', '_blank');
+            newWindow.document.write(text);
+            newWindow.document.close();
+          } else {
+            // For PDF files, open in new tab
+            const newWindow = window.open(url, '_blank');
+          }
           
           // Also trigger download
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${bill.invoiceNumber}.pdf`;
+          a.download = `${bill.invoiceNumber}.${fileExtension}`;
           a.style.display = 'none';
           document.body.appendChild(a);
           a.click();
@@ -390,7 +431,8 @@ const Dashboard = () => {
           }, 100);
           
           // Show success message
-          setNotification('PDF opened in new tab and downloaded');
+          const fileType = isHTML ? 'HTML file' : 'PDF';
+          setNotification(`${fileType} opened in new tab and downloaded`);
           setTimeout(() => setNotification(null), 3000);
           
         } catch (openError) {
@@ -400,7 +442,7 @@ const Dashboard = () => {
           const url = window.URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${bill.invoiceNumber}.pdf`;
+          a.download = `${bill.invoiceNumber}.${fileExtension}`;
           a.style.display = 'none';
           document.body.appendChild(a);
           a.click();
@@ -412,25 +454,26 @@ const Dashboard = () => {
           }, 100);
           
           // Show success message
-          setNotification('PDF downloaded successfully');
+          const fileType = isHTML ? 'HTML file' : 'PDF';
+          setNotification(`${fileType} downloaded successfully`);
           setTimeout(() => setNotification(null), 3000);
         }
       } else {
         const errorData = await response.json();
         console.log('🔍 Download failed:', errorData);
         
-        if (errorData.message === 'PDF not generated for this bill') {
-          // Try to generate PDF first
-          console.log('🔍 PDF not generated, attempting to generate...');
-          setNotification('Generating PDF...');
+        if (errorData.message === 'File not generated for this bill') {
+          // Try to generate file first
+          console.log('🔍 File not generated, attempting to generate...');
+          setNotification('Generating file...');
           
           const generateResponse = await fetch(`${API_BASE_URL}/bills/${bill._id}/generate-pdf`, {
             method: 'POST'
           });
           
           if (generateResponse.ok) {
-            console.log('🔍 PDF generated successfully, attempting download...');
-            setNotification('PDF generated, downloading...');
+            console.log('🔍 File generated successfully, attempting download...');
+            setNotification('File generated, downloading...');
             
             // Try downloading again
             const downloadResponse = await fetch(`${API_BASE_URL}/bills/${bill._id}/download`);
@@ -442,17 +485,30 @@ const Dashboard = () => {
                 throw new Error('Downloaded file is empty');
               }
               
+              // Check content type
+              const contentType = downloadResponse.headers.get('content-type');
+              const isHTML = contentType && contentType.includes('text/html');
+              const fileExtension = isHTML ? 'html' : 'pdf';
+              
               // Try to open in new tab first, then download
               try {
                 const url = window.URL.createObjectURL(blob);
                 
-                // Open in new tab
-                const newWindow = window.open(url, '_blank');
+                if (isHTML) {
+                  // For HTML files, open in new tab
+                  const text = await blob.text();
+                  const newWindow = window.open('', '_blank');
+                  newWindow.document.write(text);
+                  newWindow.document.close();
+                } else {
+                  // For PDF files, open in new tab
+                  const newWindow = window.open(url, '_blank');
+                }
                 
                 // Also trigger download
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `${bill.invoiceNumber}.pdf`;
+                a.download = `${bill.invoiceNumber}.${fileExtension}`;
                 a.style.display = 'none';
                 document.body.appendChild(a);
                 a.click();
@@ -463,7 +519,8 @@ const Dashboard = () => {
                   document.body.removeChild(a);
                 }, 100);
                 
-                setNotification('PDF generated, opened in new tab and downloaded');
+                const fileType = isHTML ? 'HTML file' : 'PDF';
+                setNotification(`${fileType} generated, opened in new tab and downloaded`);
                 setTimeout(() => setNotification(null), 3000);
                 
               } catch (openError) {
@@ -473,7 +530,7 @@ const Dashboard = () => {
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `${bill.invoiceNumber}.pdf`;
+                a.download = `${bill.invoiceNumber}.${fileExtension}`;
                 a.style.display = 'none';
                 document.body.appendChild(a);
                 a.click();
@@ -484,21 +541,22 @@ const Dashboard = () => {
                   document.body.removeChild(a);
                 }, 100);
                 
-                setNotification('PDF generated and downloaded successfully');
+                const fileType = isHTML ? 'HTML file' : 'PDF';
+                setNotification(`${fileType} generated and downloaded successfully`);
                 setTimeout(() => setNotification(null), 3000);
               }
             } else {
               const downloadError = await downloadResponse.json();
               console.error('❌ Download failed after generation:', downloadError);
-              alert(`Failed to download PDF after generation: ${downloadError.message || 'Unknown error'}`);
+              alert(`Failed to download file after generation: ${downloadError.message || 'Unknown error'}`);
             }
           } else {
             const errorData = await generateResponse.json();
-            console.error('❌ PDF generation failed:', errorData);
-            alert(`Failed to generate PDF: ${errorData.message || 'Unknown error'}`);
+            console.error('❌ File generation failed:', errorData);
+            alert(`Failed to generate file: ${errorData.message || 'Unknown error'}`);
           }
         } else {
-          alert(`Unable to download bill PDF: ${errorData.message || 'Unknown error'}`);
+          alert(`Unable to download bill file: ${errorData.message || 'Unknown error'}`);
         }
       }
     } catch (error) {

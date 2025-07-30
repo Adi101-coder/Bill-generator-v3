@@ -308,6 +308,97 @@ router.get('/test', (req, res) => {
   });
 });
 
+// Simple PDF generation test
+router.get('/test-simple-pdf', async (req, res) => {
+  try {
+    console.log('🔍 GET /test-simple-pdf - Simple PDF test called');
+    
+    // Create uploads directory if it doesn't exist
+    const uploadsDir = path.join(__dirname, '..', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    // Create a simple HTML content
+    const simpleHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Test PDF</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; }
+          h1 { color: #2563eb; }
+          p { line-height: 1.6; }
+        </style>
+      </head>
+      <body>
+        <h1>Test PDF Generation</h1>
+        <p>This is a test PDF to verify that PDF generation is working correctly.</p>
+        <p>If you can see this content, the PDF generation is successful.</p>
+        <p>Generated at: ${new Date().toLocaleString()}</p>
+      </body>
+      </html>
+    `;
+
+    const testPdfPath = path.join(uploadsDir, `test_simple_${Date.now()}.pdf`);
+    
+    console.log('🔍 Testing PDF generation to:', testPdfPath);
+    
+    // Try to generate PDF
+    let browser;
+    try {
+      browser = await puppeteer.launch({ 
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+      
+      const page = await browser.newPage();
+      await page.setContent(simpleHTML);
+      await page.waitForTimeout(1000);
+      
+      await page.pdf({
+        path: testPdfPath,
+        format: 'A4',
+        margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' }
+      });
+      
+      await browser.close();
+      
+      // Check if file was created
+      if (fs.existsSync(testPdfPath)) {
+        const stats = fs.statSync(testPdfPath);
+        res.json({
+          success: true,
+          message: 'Simple PDF test successful',
+          fileSize: stats.size,
+          filePath: testPdfPath
+        });
+      } else {
+        res.json({
+          success: false,
+          message: 'PDF file was not created'
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Simple PDF test failed:', error);
+      res.json({
+        success: false,
+        message: 'Simple PDF test failed',
+        error: error.message
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Error in simple PDF test:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error in simple PDF test',
+      error: error.message
+    });
+  }
+});
+
 // Test PDF generation endpoint
 router.post('/test-pdf', async (req, res) => {
   try {
@@ -1228,50 +1319,29 @@ router.post('/:id/generate-pdf', async (req, res) => {
     const htmlContent = generateBillHTML(bill);
     console.log('HTML content generated, length:', htmlContent.length);
 
-    // Generate PDF using Puppeteer with improved configuration
-    console.log('Launching Puppeteer browser...');
-    
-    let browser;
+    // Try multiple PDF generation methods
+    let pdfGenerated = false;
+    let errorMessages = [];
+
+    // Method 1: Try Puppeteer with basic configuration
     try {
-      browser = await puppeteer.launch({ 
+      console.log('Method 1: Trying Puppeteer with basic configuration...');
+      
+      const browser = await puppeteer.launch({ 
         headless: true,
         args: [
           '--no-sandbox', 
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
-          '--disable-field-trial-config',
-          '--disable-ipc-flooding-protection',
-          '--enable-logging',
-          '--log-level=0',
-          '--silent-launch'
+          '--disable-gpu'
         ]
       });
       
-      console.log('Browser launched, creating new page...');
       const page = await browser.newPage();
-      
-      // Set viewport for consistent rendering
       await page.setViewport({ width: 1200, height: 800 });
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 30000 });
+      await page.waitForTimeout(2000);
       
-      console.log('Setting HTML content...');
-      await page.setContent(htmlContent, { 
-        waitUntil: 'networkidle0',
-        timeout: 30000 
-      });
-      
-      // Wait a bit for any dynamic content to render
-      await page.waitForTimeout(1000);
-      
-      console.log('Generating PDF...');
       await page.pdf({
         path: pdfPath,
         format: 'A4',
@@ -1283,56 +1353,130 @@ router.post('/:id/generate-pdf', async (req, res) => {
         landscape: false
       });
       
-      console.log('PDF generated, closing browser...');
       await browser.close();
       
-    } catch (puppeteerError) {
-      console.error('Puppeteer failed:', puppeteerError);
+      // Verify PDF was created and has content
+      if (fs.existsSync(pdfPath)) {
+        const stats = fs.statSync(pdfPath);
+        if (stats.size > 0) {
+          console.log('PDF generated successfully with Method 1');
+          pdfGenerated = true;
+        } else {
+          console.log('PDF file is empty');
+          errorMessages.push('PDF file generated but is empty');
+        }
+      } else {
+        console.log('PDF file was not created');
+        errorMessages.push('PDF file was not created');
+      }
       
-      // Fallback: Create a simple HTML file instead of PDF
-      console.log('Creating HTML fallback...');
-      const htmlPath = pdfPath.replace('.pdf', '.html');
-      fs.writeFileSync(htmlPath, htmlContent);
-      
-      // Update bill with HTML path instead
+    } catch (error) {
+      console.error('Method 1 failed:', error.message);
+      errorMessages.push(`Puppeteer basic config failed: ${error.message}`);
+    }
+
+    // Method 2: Try Puppeteer with different configuration if Method 1 failed
+    if (!pdfGenerated) {
+      try {
+        console.log('Method 2: Trying Puppeteer with different configuration...');
+        
+        const browser = await puppeteer.launch({ 
+          headless: 'new',
+          args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--no-first-run',
+            '--disable-web-security'
+          ]
+        });
+        
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1200, height: 800 });
+        await page.setContent(htmlContent, { waitUntil: 'load', timeout: 30000 });
+        await page.waitForTimeout(3000);
+        
+        await page.pdf({
+          path: pdfPath,
+          format: 'A4',
+          margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
+          printBackground: true,
+          preferCSSPageSize: true,
+          displayHeaderFooter: false,
+          scale: 1.0,
+          landscape: false
+        });
+        
+        await browser.close();
+        
+        // Verify PDF was created and has content
+        if (fs.existsSync(pdfPath)) {
+          const stats = fs.statSync(pdfPath);
+          if (stats.size > 0) {
+            console.log('PDF generated successfully with Method 2');
+            pdfGenerated = true;
+          } else {
+            console.log('PDF file is empty');
+            errorMessages.push('PDF file generated but is empty');
+          }
+        } else {
+          console.log('PDF file was not created');
+          errorMessages.push('PDF file was not created');
+        }
+        
+      } catch (error) {
+        console.error('Method 2 failed:', error.message);
+        errorMessages.push(`Puppeteer alternative config failed: ${error.message}`);
+      }
+    }
+
+    // Method 3: Create HTML file as fallback
+    if (!pdfGenerated) {
+      try {
+        console.log('Method 3: Creating HTML file as fallback...');
+        const htmlPath = pdfPath.replace('.pdf', '.html');
+        fs.writeFileSync(htmlPath, htmlContent);
+        
+        // Update bill with HTML path
+        await Bill.findByIdAndUpdate(bill._id, {
+          generatedPdfPath: `uploads/${path.basename(htmlPath)}`,
+          status: 'generated'
+        });
+        
+        console.log('HTML file created as fallback');
+        
+        return res.json({
+          success: true,
+          message: 'HTML file generated (PDF generation failed)',
+          pdfPath: `uploads/${path.basename(htmlPath)}`,
+          errors: errorMessages
+        });
+      } catch (error) {
+        console.error('HTML fallback failed:', error.message);
+        errorMessages.push(`HTML fallback failed: ${error.message}`);
+      }
+    }
+
+    // If PDF was generated successfully
+    if (pdfGenerated) {
+      // Update bill with PDF path
       await Bill.findByIdAndUpdate(bill._id, {
-        generatedPdfPath: `uploads/${path.basename(htmlPath)}`,
+        generatedPdfPath: `uploads/${pdfFilename}`,
         status: 'generated'
       });
-      
-      console.log('HTML file created as fallback');
-      
-      return res.json({
+
+      console.log('Bill updated with PDF path');
+
+      res.json({
         success: true,
-        message: 'HTML file generated (PDF generation failed)',
-        pdfPath: `uploads/${path.basename(htmlPath)}`
+        message: 'PDF generated successfully',
+        pdfPath: `uploads/${pdfFilename}`
       });
+    } else {
+      // All methods failed
+      throw new Error(`All PDF generation methods failed: ${errorMessages.join(', ')}`);
     }
-
-    console.log('PDF saved to:', pdfPath);
-    console.log('Checking if file exists:', fs.existsSync(pdfPath));
-
-    // Verify the PDF file is valid
-    const stats = fs.statSync(pdfPath);
-    console.log('PDF file size:', stats.size, 'bytes');
-    
-    if (stats.size === 0) {
-      throw new Error('Generated PDF file is empty');
-    }
-
-    // Update bill with PDF path
-    await Bill.findByIdAndUpdate(bill._id, {
-      generatedPdfPath: `uploads/${pdfFilename}`,
-      status: 'generated'
-    });
-
-    console.log('Bill updated with PDF path');
-
-    res.json({
-      success: true,
-      message: 'PDF generated successfully',
-      pdfPath: `uploads/${pdfFilename}`
-    });
 
   } catch (error) {
     console.error('Error generating PDF:', error);
@@ -1345,7 +1489,7 @@ router.post('/:id/generate-pdf', async (req, res) => {
   }
 });
 
-// Download bill PDF
+// Download bill PDF or HTML
 router.get('/:id/download', async (req, res) => {
   try {
     const bill = await Bill.findById(req.params.id);
@@ -1354,40 +1498,45 @@ router.get('/:id/download', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Bill not found' });
     }
 
-    // Check if PDF exists
+    // Check if file exists
     if (!bill.generatedPdfPath) {
-      return res.status(404).json({ success: false, message: 'PDF not generated for this bill' });
+      return res.status(404).json({ success: false, message: 'File not generated for this bill' });
     }
 
-    const pdfPath = path.join(__dirname, '..', bill.generatedPdfPath);
+    const filePath = path.join(__dirname, '..', bill.generatedPdfPath);
     
     // Check if file exists
-    if (!fs.existsSync(pdfPath)) {
-      return res.status(404).json({ success: false, message: 'PDF file not found' });
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File not found' });
     }
 
     // Check if file is empty
-    const stats = fs.statSync(pdfPath);
+    const stats = fs.statSync(filePath);
     if (stats.size === 0) {
-      return res.status(404).json({ success: false, message: 'PDF file is empty' });
+      return res.status(404).json({ success: false, message: 'File is empty' });
     }
 
+    // Determine file type and set appropriate headers
+    const isHTML = filePath.endsWith('.html');
+    const contentType = isHTML ? 'text/html' : 'application/pdf';
+    const filename = isHTML ? `${bill.invoiceNumber}.html` : `${bill.invoiceNumber}.pdf`;
+    
     // Set headers for file download
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${bill.invoiceNumber}.pdf"`);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', stats.size);
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     
     // Stream the file
-    const fileStream = fs.createReadStream(pdfPath);
+    const fileStream = fs.createReadStream(filePath);
     
     // Handle stream errors
     fileStream.on('error', (error) => {
-      console.error('Error streaming PDF file:', error);
+      console.error('Error streaming file:', error);
       if (!res.headersSent) {
-        res.status(500).json({ success: false, message: 'Error streaming PDF file' });
+        res.status(500).json({ success: false, message: 'Error streaming file' });
       }
     });
     
