@@ -252,7 +252,8 @@ const Dashboard = () => {
       model: bill.model || '',
       imeiSerialNumber: bill.imeiSerialNumber || '',
       assetCost: bill.assetCost || 0,
-      hdbFinance: bill.hdbFinance || false
+      hdbFinance: bill.hdbFinance || false,
+      tvsFinance: bill.tvsFinance || false
     };
     console.log('🔍 Setting edit form data:', formData);
     setEditFormData(formData);
@@ -1689,6 +1690,35 @@ const Dashboard = () => {
                     cursor: 'pointer'
                   }}>
                     Finance by HDBFS
+                  </label>
+                </div>
+
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px',
+                  padding: '12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  backgroundColor: '#f9fafb'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={editFormData.tvsFinance}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, tvsFinance: e.target.checked }))}
+                    style={{ 
+                      width: '18px', 
+                      height: '18px',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <label style={{ 
+                    margin: 0, 
+                    fontWeight: '600', 
+                    color: '#374151',
+                    cursor: 'pointer'
+                  }}>
+                    Finance by TVS CREDIT
                   </label>
                 </div>
               </div>

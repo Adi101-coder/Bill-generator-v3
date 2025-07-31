@@ -226,15 +226,24 @@ const BillGenerator = () => {
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let fullText = '';
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          fullText += textContent.items.map(item => item.str).join(' ') + ' ';
-      }
+        // Only extract the first page
+        const page = await pdf.getPage(1);
+        const textContent = await page.getTextContent();
+        fullText = textContent.items.map(item => item.str).join(' ') + ' ';
+        
+        console.log('🔍 Extracted text from first page only');
+        console.log('🔍 Total pages in PDF:', pdf.numPages);
 
       const isHDBDoc = fullText.includes('HDB FINANCIAL SERVICES');
       const isIDFCBankDoc = fullText.includes('IDFC FIRST Bank');
       const isCholaDoc = fullText.includes('CHOLA') || fullText.includes('Chola');
+      const isTVSDoc = fullText.includes('TVS CREDIT') || fullText.includes('TVS Credit') || fullText.includes('TVS credit');
+      
+      console.log('🔍 Document type detection:');
+      console.log('🔍 HDB:', isHDBDoc);
+      console.log('🔍 IDFC:', isIDFCBankDoc);
+      console.log('🔍 Chola:', isCholaDoc);
+      console.log('🔍 TVS:', isTVSDoc);
 
       let customerName = '';
       let manufacturer = '';
@@ -244,6 +253,7 @@ const BillGenerator = () => {
       let serialNumber = '';
       let assetCost = 0;
       let hdbFinance = false;
+      let tvsFinance = false;
       if (isHDBDoc) {
         hdbFinance = true;
         const customerMatch = fullText.match(/to our Customer\s+(.+?)\s+\. Pursuant/i);
@@ -428,6 +438,229 @@ const BillGenerator = () => {
         if (assetCostMatch) {
           assetCost = parseFloat(assetCostMatch[1].replace(/[^0-9.]/g, ''));
         }
+      } else if (isTVSDoc) {
+        tvsFinance = true;
+        
+        console.log('🔍 TVS CREDIT DETECTED - Starting extraction...');
+        console.log('🔍 Complete PDF text length:', fullText.length);
+        console.log('🔍 Complete PDF text:');
+        console.log('='.repeat(80));
+        console.log(fullText);
+        console.log('='.repeat(80));
+        
+        // Find the key paragraph to start extraction
+        const keyParagraph = "Pursuant to the  agreement executed by the Customer in our favour with respect to the Loan facility and on the basis of the instructions of the Customer we  are disbursing the following amount in your favour.  Kindly arrange the delivery of the Product to the customer at the below address only.";
+        const keyParagraphIndex = fullText.indexOf(keyParagraph);
+        console.log('🔍 Key paragraph found at index:', keyParagraphIndex);
+        
+        if (keyParagraphIndex === -1) {
+          console.log('❌ Key paragraph not found in PDF text');
+          console.log('🔍 Let me search for partial matches...');
+          
+          // Try to find partial matches
+          const partialMatches = [
+            'Pursuant to the agreement',
+            'disbursing the following amount',
+            'arrange the delivery of the Product',
+            'Customer Name:',
+            'Customer Address:',
+            'Product Brand:',
+            'Product Model:'
+          ];
+          
+          partialMatches.forEach(match => {
+            const index = fullText.indexOf(match);
+            console.log(`🔍 "${match}" found at index: ${index}`);
+          });
+          
+          return;
+        }
+        
+        // Let's try a different approach - search for all headings in the text
+        console.log('🔍 Searching for all headings in the text...');
+        const headings = [
+          'Customer Name:',
+          'Customer Name :',
+          'Mobile Number:',
+          'Mobile Number :',
+          'Customer Address:',
+          'Customer Address :',
+          'Product Brand:',
+          'Product Brand :',
+          'Product Catg & Make:',
+          'Product Catg & Make :',
+          'Product Model:',
+          'Product Model :'
+        ];
+        
+        headings.forEach(heading => {
+          const index = fullText.indexOf(heading);
+          console.log(`🔍 "${heading}" found at index: ${index}`);
+          if (index !== -1) {
+            // Show some context around the heading
+            const context = fullText.substring(index, index + 100);
+            console.log(`🔍 Context around "${heading}": ${context}`);
+          }
+        });
+        
+        // Customer Name extraction - from "Customer Name:" until "Mobile Number:"
+        let customerNameStart = fullText.indexOf('Customer Name:') !== -1 ? fullText.indexOf('Customer Name:') : fullText.indexOf('Customer Name :');
+        let mobileNumberStart = fullText.indexOf('Mobile Number:') !== -1 ? fullText.indexOf('Mobile Number:', customerNameStart) : fullText.indexOf('Mobile Number :', customerNameStart);
+        
+        // If not found from key paragraph, try from beginning
+        if (customerNameStart === -1) {
+          customerNameStart = fullText.indexOf('Customer Name:') !== -1 ? fullText.indexOf('Customer Name:') : fullText.indexOf('Customer Name :');
+          mobileNumberStart = fullText.indexOf('Mobile Number:') !== -1 ? fullText.indexOf('Mobile Number:', customerNameStart) : fullText.indexOf('Mobile Number :', customerNameStart);
+        }
+        
+        console.log('🔍 Customer Name boundaries:', { customerNameStart, mobileNumberStart });
+        
+        if (customerNameStart !== -1 && mobileNumberStart !== -1 && mobileNumberStart > customerNameStart) {
+          const customerNameText = fullText.substring(customerNameStart + 'Customer Name:'.length, mobileNumberStart);
+          customerName = customerNameText.trim();
+          // Remove any extra colons at the beginning
+          customerName = customerName.replace(/^:+\s*/, '');
+          console.log('🔍 Customer Name extracted (boundary method):', customerName);
+          console.log('🔍 Raw Customer Name text:', JSON.stringify(customerNameText));
+        } else {
+          console.log('❌ Customer Name boundaries not found');
+          console.log('🔍 Customer Name start index:', customerNameStart);
+          console.log('🔍 Mobile Number start index:', mobileNumberStart);
+        }
+        console.log('🔍 Final Customer Name:', customerName);
+        
+        // Customer Address extraction - from "Customer Address:" until "Product Brand:"
+        let addressStart = fullText.indexOf('Customer Address:') !== -1 ? fullText.indexOf('Customer Address:', mobileNumberStart) : fullText.indexOf('Customer Address :', mobileNumberStart);
+        let productBrandStart = fullText.indexOf('Product Brand:') !== -1 ? fullText.indexOf('Product Brand:', addressStart) : fullText.indexOf('Product Brand :', addressStart);
+        
+        // If not found, try from beginning
+        if (addressStart === -1) {
+          addressStart = fullText.indexOf('Customer Address:') !== -1 ? fullText.indexOf('Customer Address:') : fullText.indexOf('Customer Address :');
+          productBrandStart = fullText.indexOf('Product Brand:') !== -1 ? fullText.indexOf('Product Brand:', addressStart) : fullText.indexOf('Product Brand :', addressStart);
+        }
+        
+        console.log('🔍 Address boundaries:', { addressStart, productBrandStart });
+        
+        if (addressStart !== -1 && productBrandStart !== -1 && productBrandStart > addressStart) {
+          const addressText = fullText.substring(addressStart + 'Customer Address:'.length, productBrandStart);
+          customerAddress = addressText.trim();
+          console.log('🔍 Customer Address extracted (boundary method):', customerAddress);
+          console.log('🔍 Raw Address text:', JSON.stringify(addressText));
+        } else {
+          console.log('❌ Address boundaries not found');
+          console.log('🔍 Address start index:', addressStart);
+          console.log('🔍 Product Brand start index:', productBrandStart);
+        }
+        console.log('🔍 Final Customer Address:', customerAddress);
+        
+        // Product Brand extraction - from "Product Brand:" until "Product Catg & Make:"
+        const productBrandEnd = fullText.indexOf('Product Catg & Make:') !== -1 ? fullText.indexOf('Product Catg & Make:', productBrandStart) : fullText.indexOf('Product Catg & Make :', productBrandStart);
+        let productBrand = ''; // Declare productBrand outside the if block
+        
+        console.log('🔍 Product Brand boundaries:', { productBrandStart, productBrandEnd });
+        
+        if (productBrandStart !== -1 && productBrandEnd !== -1 && productBrandEnd > productBrandStart) {
+          const productBrandText = fullText.substring(productBrandStart + 'Product Brand:'.length, productBrandEnd);
+          productBrand = productBrandText.trim();
+          // Remove any extra colons at the beginning
+          productBrand = productBrand.replace(/^:+\s*/, '');
+          console.log('🔍 Product Brand extracted:', productBrand);
+          
+          // Product Catg & Make extraction - from "Product Catg & Make:" until "Product Model:"
+          const productCatgStart = productBrandEnd;
+          const productModelStart = fullText.indexOf('Product Model:') !== -1 ? fullText.indexOf('Product Model:', productCatgStart) : fullText.indexOf('Product Model :', productCatgStart);
+          
+          console.log('🔍 Product Catg & Make boundaries:', { productCatgStart, productModelStart });
+          
+          if (productCatgStart !== -1 && productModelStart !== -1 && productModelStart > productCatgStart) {
+            const productCatgText = fullText.substring(productCatgStart + 'Product Catg & Make:'.length, productModelStart);
+            const productCatg = productCatgText.trim();
+            // Remove any extra colons at the beginning
+            const cleanProductCatg = productCatg.replace(/^:+\s*/, '');
+            console.log('🔍 Product Catg & Make extracted:', productCatg);
+            console.log('🔍 Clean Product Catg & Make:', cleanProductCatg);
+            
+            // Use only Product Catg & Make for asset category (no Product Brand)
+            assetCategory = cleanProductCatg.trim();
+            console.log('🔍 Asset Category (Product Catg & Make only):', assetCategory);
+          } else {
+            console.log('❌ Product Catg & Make boundaries not found');
+          }
+        } else {
+          console.log('❌ Product Brand boundaries not found');
+        }
+        
+        // Product Model extraction - from "Product Model:" until end of paragraph or next heading
+        const modelStart = fullText.indexOf('Product Model:') !== -1 ? fullText.indexOf('Product Model:', productBrandStart) : fullText.indexOf('Product Model :', productBrandStart);
+        
+        console.log('🔍 Product Model start:', modelStart);
+        
+        if (modelStart !== -1) {
+          // Get the text after "Product Model:"
+          const modelText = fullText.substring(modelStart + 'Product Model:'.length);
+          console.log('🔍 Raw model text after Product Model:', JSON.stringify(modelText));
+          
+          // Find the end of the model - look for next heading or end of text
+          const nextHeadings = [
+            'Customer Name:',
+            'Customer Name :',
+            'Mobile Number:',
+            'Mobile Number :',
+            'Customer Address:',
+            'Customer Address :',
+            'Product Brand:',
+            'Product Brand :',
+            'Product Catg & Make:',
+            'Product Catg & Make :',
+            'Scheme Code & EMI:',
+            'Scheme Code & EMI :'
+          ];
+          
+          let modelEnd = -1;
+          for (const heading of nextHeadings) {
+            const headingIndex = modelText.indexOf(heading);
+            if (headingIndex !== -1 && (modelEnd === -1 || headingIndex < modelEnd)) {
+              modelEnd = headingIndex;
+            }
+          }
+          
+          if (modelEnd !== -1) {
+            model = modelText.substring(0, modelEnd).trim();
+          } else {
+            // If no next heading found, take the whole text
+            model = modelText.trim();
+          }
+          
+          console.log('🔍 Product Model extracted:', model);
+          console.log('🔍 Model end found at:', modelEnd);
+        } else {
+          console.log('❌ Product Model not found');
+        }
+        
+        // Product Cost extraction
+        const productCostMatch = fullText.match(/Product Cost:?[ \t]*([\d,\.]+)/i);
+        if (productCostMatch) {
+          assetCost = parseFloat(productCostMatch[1].replace(/[^0-9.]/g, ''));
+          console.log('🔍 Product Cost:', assetCost);
+        } else {
+          console.log('🔍 Product Cost: Not found');
+        }
+        
+        // Set manufacturer as Product Brand
+        manufacturer = productBrand;
+        console.log('🔍 Manufacturer (set to Product Brand):', manufacturer);
+        
+        console.log('🔍 TVS CREDIT EXTRACTION COMPLETE');
+        console.log('🔍 tvsFinance flag set to:', tvsFinance);
+        console.log('🔍 Final extracted data:', {
+          customerName,
+          customerAddress,
+          manufacturer,
+          assetCategory,
+          model,
+          assetCost,
+          tvsFinance
+        });
       } else {
         const customerMatch = fullText.match(/Customer Name:?[ \t]*([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i);
         customerName = customerMatch ? customerMatch[1].trim() : '';
@@ -465,7 +698,8 @@ const BillGenerator = () => {
         imeiSerialNumber: serialNumber,
         date: new Date().toISOString().split('T')[0],
         assetCost,
-        hdbFinance
+        hdbFinance,
+        tvsFinance
       };
 
       // Debug logging for IDFC bills
@@ -480,6 +714,7 @@ const BillGenerator = () => {
         });
       }
 
+      console.log('🔍 Final extractedData object:', extractedData);
       setExtractedData(extractedData);
       
       // Save to database
@@ -500,9 +735,16 @@ const BillGenerator = () => {
       const amountInWords = numberToWords(data.assetCost);
       const taxAmountInWords = numberToWords(parseFloat(taxDetails.totalTaxAmount));
 
+      // Generate unique invoice number for TVS bills if needed
+      let finalInvoiceNumber = invoiceNum;
+      if (data.tvsFinance && (!invoiceNum || invoiceNum.trim() === '')) {
+        finalInvoiceNumber = generateUniqueInvoiceNumber();
+        console.log('🔍 Generated unique invoice number for TVS bill:', finalInvoiceNumber);
+      }
+
       // Ensure required fields are not empty
       const billData = {
-        invoiceNumber: invoiceNum,
+        invoiceNumber: finalInvoiceNumber,
         customerName: data.customerName || 'Unknown Customer',
         customerAddress: data.customerAddress || 'No Address',
         manufacturer: data.manufacturer || 'Unknown Manufacturer',
@@ -514,6 +756,7 @@ const BillGenerator = () => {
         amountInWords,
         taxAmountInWords,
         hdbFinance: data.hdbFinance || false,
+        tvsFinance: data.tvsFinance || false,
         status: 'generated',
         date: new Date().toISOString().split('T')[0],
         product: `${data.manufacturer || 'Unknown'} ${data.assetCategory || 'Other'} - ${data.model || 'Unknown'}`,
@@ -607,6 +850,12 @@ const BillGenerator = () => {
     } catch (error) {
       console.error('Error in print/download process:', error);
     }
+  };
+
+  const generateUniqueInvoiceNumber = () => {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000);
+    return `TVS-${timestamp}-${random}`;
   };
 
   const handleFileUpload = (event) => {
@@ -782,6 +1031,7 @@ const BillGenerator = () => {
         </tr>
       </table>
       ${extractedData.hdbFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY HDBFS</td></tr>` : ''}
+      ${extractedData.tvsFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY TVS CREDIT</td></tr>` : ''}
       <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 4px;">
         <tr>
           <td style="border: 1px solid #000; width: 50%; vertical-align: top; padding: 4px; font-size:8px;">

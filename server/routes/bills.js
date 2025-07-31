@@ -267,6 +267,7 @@ const generateBillHTML = (bill) => {
           </tr>
         </table>
         ${bill.hdbFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY HDBFS</td></tr>` : ''}
+        ${bill.tvsFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY TVS CREDIT</td></tr>` : ''}
         <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 4px;">
           <tr>
             <td style="border: 1px solid #000; width: 50%; vertical-align: top; padding: 4px; font-size:8px;">

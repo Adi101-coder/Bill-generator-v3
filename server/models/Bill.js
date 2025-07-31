@@ -61,6 +61,10 @@ const billSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  tvsFinance: {
+    type: Boolean,
+    default: false
+  },
   originalPdfPath: {
     type: String,
     default: ''
