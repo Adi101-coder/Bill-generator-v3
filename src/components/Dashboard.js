@@ -253,7 +253,9 @@ const Dashboard = () => {
       imeiSerialNumber: bill.imeiSerialNumber || '',
       assetCost: bill.assetCost || 0,
       hdbFinance: bill.hdbFinance || false,
-      tvsFinance: bill.tvsFinance || false
+      tvsFinance: bill.tvsFinance || false,
+      bajajFinance: bill.bajajFinance || false,
+      poonawallaFinance: bill.poonawallaFinance || false
     };
     console.log('🔍 Setting edit form data:', formData);
     setEditFormData(formData);
@@ -877,6 +879,9 @@ const Dashboard = () => {
                   <option value="Chola">Chola</option>
                   <option value="IDFC">IDFC</option>
                   <option value="HDB">HDB</option>
+                  <option value="TVS">TVS</option>
+                  <option value="Bajaj">Bajaj</option>
+                  <option value="Poonawalla">Poonawalla</option>
                 </select>
               </div>
               <div className="filter-row">
@@ -1575,6 +1580,9 @@ const Dashboard = () => {
                     <option value="Chola">Chola</option>
                     <option value="IDFC">IDFC</option>
                     <option value="HDB">HDB</option>
+                    <option value="TVS">TVS</option>
+                    <option value="Bajaj">Bajaj</option>
+                    <option value="Poonawalla">Poonawalla</option>
                     <option value="Other">Other</option>
                   </select>
                 </div>
@@ -1719,6 +1727,64 @@ const Dashboard = () => {
                     cursor: 'pointer'
                   }}>
                     Finance by TVS CREDIT
+                  </label>
+                </div>
+
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px',
+                  padding: '12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  backgroundColor: '#f9fafb'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={editFormData.bajajFinance}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, bajajFinance: e.target.checked }))}
+                    style={{ 
+                      width: '18px', 
+                      height: '18px',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <label style={{ 
+                    margin: 0, 
+                    fontWeight: '600', 
+                    color: '#374151',
+                    cursor: 'pointer'
+                  }}>
+                    Finance by BAJAJ FINSERV
+                  </label>
+                </div>
+
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px',
+                  padding: '12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  backgroundColor: '#f9fafb'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={editFormData.poonawallaFinance}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, poonawallaFinance: e.target.checked }))}
+                    style={{ 
+                      width: '18px', 
+                      height: '18px',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <label style={{ 
+                    margin: 0, 
+                    fontWeight: '600', 
+                    color: '#374151',
+                    cursor: 'pointer'
+                  }}>
+                    Finance by POONAWALLA FINCORP
                   </label>
                 </div>
               </div>

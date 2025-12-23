@@ -86,12 +86,12 @@ const formatAmount = (num) => {
 };
 
 const calculateTaxDetails = (assetCost, assetCategory) => {
-  const isAirConditioner = assetCategory.toUpperCase().includes('AIR CONDITIONER');
-  const rate = isAirConditioner ? assetCost / 1.28 : assetCost / 1.18;
-  const cgst = isAirConditioner ? ((assetCost - (assetCost / 1.28)) / 2) : ((assetCost - (assetCost / 1.18)) / 2);
+  // Always use 18% GST (9% CGST + 9% SGST) regardless of product category
+  const rate = assetCost / 1.18;
+  const cgst = (assetCost - (assetCost / 1.18)) / 2;
   const sgst = cgst;
   const taxableValue = assetCost - (sgst + cgst);
-  const taxRate = isAirConditioner ? 14 : 9;
+  const taxRate = 9;
   const totalTaxAmount = sgst + cgst;
   
   return {
@@ -137,7 +137,7 @@ const generateBillHTML = (bill) => {
         <div style="text-align:center; font-size:18px; font-weight:bold; margin-bottom:8px;">Tax Invoice</div>
         <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 0; table-layout: fixed;">
           <tr>
-            <td rowspan="8" style="border:1px solid #000; padding:10px; width:40%; vertical-align:top; font-weight:bold; font-size:9px;">
+            <td rowspan="8" style="border:1px solid #000; padding:10px; width:40%; vertical-align:top; font-weight:bold; font-size:9px; word-wrap: break-word; overflow-wrap: break-word;">
               KATIYAR ELECTRONICS<br>
               H.I.G.J-33 VISHWABANK BARRA<br>
               KARRAHI<br>
@@ -149,14 +149,14 @@ const generateBillHTML = (bill) => {
                 <hr style="border: none; border-top: 1px solid #000; width: 100%; margin: 0; padding: 0;" />
               </div>
               <b>Consignee (Ship to)</b><br>
-              ${bill.customerName}<br>
-              ${bill.customerAddress}<br>
+              <span style="word-wrap: break-word; overflow-wrap: break-word; display: block;">${bill.customerName}</span>
+              <span style="word-wrap: break-word; overflow-wrap: break-word; display: block;">${bill.customerAddress}</span><br>
               <div style="margin-left: -8px; margin-right: -8px;">
                 <hr style="border: none; border-top: 1px solid #000; width: 100%; margin: 0; padding: 0;" />
               </div>
               <b>Buyer (Bill to)</b><br>
-              ${bill.customerName}<br>
-              ${bill.customerAddress}
+              <span style="word-wrap: break-word; overflow-wrap: break-word; display: block;">${bill.customerName}</span>
+              <span style="word-wrap: break-word; overflow-wrap: break-word; display: block;">${bill.customerAddress}</span>
             </td>
             <td style="border:1px solid #000; padding:10px; font-weight:bold; width:50%; font-size:9px; text-align:center;">Invoice No.<div style='height:6px;'></div><div>${bill.invoiceNumber}</div></td>
             <td style="border:1px solid #000; padding:10px; font-weight:bold; width:50%; font-size:9px; text-align:center;">Dated<div style='height:6px;'></div><div>${new Date(bill.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div></td>
@@ -193,10 +193,10 @@ const generateBillHTML = (bill) => {
           </tr>
           <tr>
             <td style="border: 1px solid #000; text-align: center; padding: 3px; font-size:9px;">1</td>
-            <td style="border: 1px solid #000; vertical-align: top; padding: 6px; font-size:9px;">
-              <strong>${bill.manufacturer} ${bill.assetCategory}</strong><br><br>
-              <strong>Model No:</strong> ${bill.model}<br>
-              ${bill.imeiSerialNumber ? `<b>Serial Number:</b> ${bill.imeiSerialNumber}<br>` : ''}
+            <td style="border: 1px solid #000; vertical-align: top; padding: 6px; font-size:9px; word-wrap: break-word; overflow-wrap: break-word;">
+              <strong style="word-wrap: break-word; overflow-wrap: break-word; display: block;">${bill.manufacturer} ${bill.assetCategory}</strong><br><br>
+              <strong>Model No:</strong> <span style="word-wrap: break-word; overflow-wrap: break-word;">${bill.model}</span><br>
+              ${bill.imeiSerialNumber ? `<b>Serial Number:</b> <span style="word-wrap: break-word; overflow-wrap: break-word;">${bill.imeiSerialNumber}</span><br>` : ''}
               <div style="display: flex; justify-content: space-between; margin-top: 6px;">
                 <div><strong>CGST</strong></div>
                 <div>${formatAmount(Number(taxDetails.cgst))}</div>
@@ -268,6 +268,8 @@ const generateBillHTML = (bill) => {
         </table>
         ${bill.hdbFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY HDBFS</td></tr>` : ''}
         ${bill.tvsFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY TVS CREDIT</td></tr>` : ''}
+        ${bill.bajajFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY BAJAJ FINSERV</td></tr>` : ''}
+        ${bill.poonawallaFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY POONAWALLA FINCORP</td></tr>` : ''}
         <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 4px;">
           <tr>
             <td style="border: 1px solid #000; width: 50%; vertical-align: top; padding: 4px; font-size:8px;">
@@ -736,7 +738,10 @@ router.post('/', async (req, res) => {
       model: billData.model || 'Unknown Model',
       imeiSerialNumber: billData.imeiSerialNumber || '',
       assetCost: parseFloat(billData.assetCost) || 0,
-      hdbFinance: billData.hdbFinance || false
+      hdbFinance: billData.hdbFinance || false,
+      tvsFinance: billData.tvsFinance || false,
+      bajajFinance: billData.bajajFinance || false,
+      poonawallaFinance: billData.poonawallaFinance || false
     };
 
     // Clean up asset category for IDFC bills
@@ -804,11 +809,14 @@ router.put('/:id', async (req, res) => {
       model, 
       imeiSerialNumber, 
       assetCost, 
-      hdbFinance 
+      hdbFinance,
+      tvsFinance,
+      bajajFinance,
+      poonawallaFinance
     } = req.body;
 
     console.log('🔍 Extracted data from request body:', {
-      customerName, customerAddress, manufacturer, assetCategory, model, imeiSerialNumber, assetCost, hdbFinance
+      customerName, customerAddress, manufacturer, assetCategory, model, imeiSerialNumber, assetCost, hdbFinance, tvsFinance, bajajFinance, poonawallaFinance
     });
     
     // Validate required fields
@@ -888,6 +896,9 @@ router.put('/:id', async (req, res) => {
       imeiSerialNumber,
       assetCost,
       hdbFinance,
+      tvsFinance,
+      bajajFinance,
+      poonawallaFinance,
       taxDetails,
       amountInWords,
       taxAmountInWords,

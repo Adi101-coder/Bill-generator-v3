@@ -236,6 +236,8 @@ const BillGenerator = () => {
       const isIDFCBankDoc = fullText.includes('IDFC FIRST Bank');
       const isCholaDoc = fullText.includes('CHOLA') || fullText.includes('Chola');
       const isTVSDoc = fullText.includes('TVS CREDIT') || fullText.includes('TVS Credit') || fullText.includes('TVS credit');
+      const isBajajDoc = fullText.includes('BAJAJ') || fullText.includes('Bajaj') || fullText.includes('BAJAJ FINSERV') || fullText.includes('Bajaj Finserv');
+      const isPoonawallaDoc = fullText.includes('POONAWALLA') || fullText.includes('Poonawalla') || fullText.includes('POONAWALLA FINCORP') || fullText.includes('Poonawalla Fincorp');
 
       let customerName = '';
       let manufacturer = '';
@@ -572,6 +574,124 @@ const BillGenerator = () => {
           assetCost,
           tvsFinance
         });
+      } else if (isBajajDoc) {
+        console.log('🔍 BAJAJ FINSERV DETECTED - Starting extraction...');
+        console.log('🔍 Complete PDF text length:', fullText.length);
+        
+        // 1. Customer Name Extraction
+        // Look for: "loan application of Mr/Miss/Mrs. [NAME] has been approved by Bajaj Finance"
+        const customerNameMatch = fullText.match(/loan application of (?:Mr\/Miss\/Mrs\.|Mr|Miss|Mrs)\s+(.+?)\s+has been approved by Bajaj Finance/i);
+        if (customerNameMatch) {
+          customerName = customerNameMatch[1].trim();
+          console.log('🔍 Customer Name extracted:', customerName);
+        } else {
+          console.log('❌ Customer Name not found');
+        }
+        
+        // 2. Asset Category Extraction
+        // Look for: "Asset Category" cell
+        const assetCategoryMatch = fullText.match(/Asset Category[\s\S]*?([A-Z\s]+?)(?=\s*(?:OEM Asset Category|Manufacturer|Model|EAN|$))/i);
+        if (assetCategoryMatch) {
+          assetCategory = assetCategoryMatch[1].trim();
+          console.log('🔍 Asset Category extracted:', assetCategory);
+        } else {
+          console.log('❌ Asset Category not found');
+        }
+        
+        // 3. Manufacturer Extraction
+        // Look for: "Manufacturer" cell
+        const manufacturerMatch = fullText.match(/Manufacturer[\s\S]*?([A-Z\s]+?)(?=\s*(?:Model|EAN|Scheme|$))/i);
+        if (manufacturerMatch) {
+          manufacturer = manufacturerMatch[1].trim();
+          console.log('🔍 Manufacturer extracted:', manufacturer);
+        } else {
+          console.log('❌ Manufacturer not found');
+        }
+        
+        // 4. Model Extraction
+        // Look for: "Model" cell
+        const modelMatch = fullText.match(/Model[\s\S]*?([A-Z0-9\-\s]+?)(?=\s*(?:EAN Number|Scheme Code|Product Price|$))/i);
+        if (modelMatch) {
+          model = modelMatch[1].trim();
+          console.log('🔍 Model extracted:', model);
+        } else {
+          console.log('❌ Model not found');
+        }
+        
+        // 5. Product Price (Asset Cost) Extraction
+        // Look for: "Product Price" cell
+        const productPriceMatch = fullText.match(/Product Price[\s\S]*?([\d,\.]+)/i);
+        if (productPriceMatch) {
+          assetCost = parseFloat(productPriceMatch[1].replace(/[^0-9.]/g, ''));
+          console.log('🔍 Product Price extracted:', assetCost);
+        } else {
+          console.log('❌ Product Price not found');
+        }
+        
+        // 6. Customer Address Extraction
+        // Look for: "Address of the customer for delivery" on page 2
+        const addressMatch = fullText.match(/Address of the customer for delivery[\s:]*(.+?)(?=Mobile Number|Delivery Address|$)/is);
+        if (addressMatch) {
+          customerAddress = addressMatch[1].trim();
+          // Clean up the address - remove extra whitespace
+          customerAddress = customerAddress.replace(/\s+/g, ' ').trim();
+          console.log('🔍 Customer Address extracted:', customerAddress);
+        } else {
+          // Fallback: Try to find address after "Address" keyword
+          const fallbackAddressMatch = fullText.match(/(?:Customer )?Address[\s:]*(.+?\d{6})/is);
+          if (fallbackAddressMatch) {
+            customerAddress = fallbackAddressMatch[1].trim().replace(/\s+/g, ' ');
+            console.log('🔍 Customer Address extracted (fallback):', customerAddress);
+          } else {
+            console.log('❌ Customer Address not found');
+          }
+        }
+        
+        // 7. Serial Number - will be provided manually (like HDB)
+        serialNumber = '';
+        console.log('🔍 Serial Number: Will be provided manually');
+        
+        console.log('🔍 BAJAJ FINSERV EXTRACTION COMPLETE');
+        console.log('🔍 Final extracted data:', {
+          customerName,
+          customerAddress,
+          manufacturer,
+          assetCategory,
+          model,
+          assetCost,
+          serialNumber: 'Manual entry required'
+        });
+      } else if (isPoonawallaDoc) {
+        console.log('🔍 POONAWALLA FINCORP DETECTED - Starting extraction...');
+        
+        // Poonawalla extraction logic (similar pattern to other finance companies)
+        const customerMatch = fullText.match(/Customer Name:?[ \t]*([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i);
+        customerName = customerMatch ? customerMatch[1].trim() : '';
+        customerName = customerName.replace(/\s+Customer$/, '').trim();
+        
+        const manufacturerMatch = fullText.match(/Manufacturer:?[ \t]*([^ \t\n]+)/i);
+        manufacturer = manufacturerMatch ? manufacturerMatch[1].trim() : '';
+        
+        const addressMatch = fullText.match(/(?:Customer )?Address:?[ \t]*([\s\S]*?\d{6})/i);
+        customerAddress = addressMatch ? addressMatch[1].trim() : '';
+        customerAddress = customerAddress.replace(/^(?:Customer )?Address:?[ \t]*(.*)$/i, '$1').trim();
+        
+        const rawAssetCategoryMatch = fullText.match(/Asset Category:?[ \t]*([A-Za-z\s]+?)(?=\s*(?:Sub-Category|Variant|\bModel\b|\bSerial Number\b|\bAsset Cost\b|$))/i);
+        assetCategory = rawAssetCategoryMatch ? rawAssetCategoryMatch[1].trim() : '';
+        if (assetCategory.endsWith('D')) assetCategory = assetCategory.slice(0, -1).trim();
+        
+        const modelMatch = fullText.match(/Model:?\s*([^\n\r]+?)(?=\s*Asset Category|\n|\r)/i);
+        model = modelMatch ? modelMatch[1].trim() : '';
+        
+        const serialNumberMatch = fullText.match(/Serial Number:?[ \t]*([^ \t\n]+)/i);
+        serialNumber = serialNumberMatch ? serialNumberMatch[1].trim() : '';
+        
+        const assetCostMatch = fullText.match(/(?:Asset Cost|Product Cost)[^\d]*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/i);
+        if (assetCostMatch) {
+          assetCost = parseFloat(assetCostMatch[1].replace(/[^0-9.]/g, ''));
+        }
+        
+        console.log('🔍 POONAWALLA FINCORP EXTRACTION COMPLETE');
       } else {
         const customerMatch = fullText.match(/Customer Name:?[ \t]*([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i);
         customerName = customerMatch ? customerMatch[1].trim() : '';
@@ -610,7 +730,9 @@ const BillGenerator = () => {
         date: new Date().toISOString().split('T')[0],
         assetCost,
         hdbFinance,
-        tvsFinance
+        tvsFinance,
+        bajajFinance: isBajajDoc,
+        poonawallaFinance: isPoonawallaDoc
       };
 
       // Debug logging for IDFC bills
@@ -660,6 +782,8 @@ const BillGenerator = () => {
         taxAmountInWords,
         hdbFinance: data.hdbFinance || false,
         tvsFinance: data.tvsFinance || false,
+        bajajFinance: data.bajajFinance || false,
+        poonawallaFinance: data.poonawallaFinance || false,
         status: 'generated',
         date: new Date().toISOString().split('T')[0],
         product: `${data.manufacturer || 'Unknown'} ${data.assetCategory || 'Other'} - ${data.model || 'Unknown'}`,
@@ -766,12 +890,12 @@ const BillGenerator = () => {
   };
 
   const calculateTaxDetails = (assetCost, assetCategory) => {
-    const isAirConditioner = assetCategory.toUpperCase().includes('AIR CONDITIONER');
-    const rate = isAirConditioner ? assetCost / 1.28 : assetCost / 1.18;
-    const cgst = isAirConditioner ? ((assetCost - (assetCost / 1.28)) / 2) : ((assetCost - (assetCost / 1.18)) / 2);
+    // Always use 18% GST (9% CGST + 9% SGST) regardless of product category
+    const rate = assetCost / 1.18;
+    const cgst = (assetCost - (assetCost / 1.18)) / 2;
     const sgst = cgst;
     const taxableValue = assetCost - (sgst + cgst);
-    const taxRate = isAirConditioner ? 14 : 9;
+    const taxRate = 9;
     const totalTaxAmount = sgst + cgst;
     
     return {
@@ -798,7 +922,7 @@ const BillGenerator = () => {
       <div style="text-align:center; font-size:18px; font-weight:bold; margin-bottom:8px;">Tax Invoice</div>
       <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 0; table-layout: fixed;">
         <tr>
-                      <td rowspan="8" style="border:1px solid #000; padding:10px; width:40%; vertical-align:top; font-weight:bold; font-size:9px;">
+                      <td rowspan="8" style="border:1px solid #000; padding:10px; width:40%; vertical-align:top; font-weight:bold; font-size:9px; word-wrap: break-word; overflow-wrap: break-word;">
             KATIYAR ELECTRONICS<br>
             H.I.G.J-33 VISHWABANK BARRA<br>
             KARRAHI<br>
@@ -810,14 +934,14 @@ const BillGenerator = () => {
               <hr style="border: none; border-top: 1px solid #000; width: 100%; margin: 0; padding: 0;" />
             </div>
             <b>Consignee (Ship to)</b><br>
-            ${extractedData.customerName}<br>
-            ${extractedData.customerAddress}<br>
+            <span style="word-wrap: break-word; overflow-wrap: break-word; display: block;">${extractedData.customerName}</span>
+            <span style="word-wrap: break-word; overflow-wrap: break-word; display: block;">${extractedData.customerAddress}</span><br>
             <div style="margin-left: -8px; margin-right: -8px;">
               <hr style="border: none; border-top: 1px solid #000; width: 100%; margin: 0; padding: 0;" />
             </div>
             <b>Buyer (Bill to)</b><br>
-            ${extractedData.customerName}<br>
-            ${extractedData.customerAddress}
+            <span style="word-wrap: break-word; overflow-wrap: break-word; display: block;">${extractedData.customerName}</span>
+            <span style="word-wrap: break-word; overflow-wrap: break-word; display: block;">${extractedData.customerAddress}</span>
           </td>
                       <td style="border:1px solid #000; padding:10px; font-weight:bold; width:50%; font-size:9px; text-align:center;">Invoice No.<div style='height:6px;'></div><div>${invoiceNumber}</div></td>
             <td style="border:1px solid #000; padding:10px; font-weight:bold; width:50%; font-size:9px; text-align:center;">Dated<div style='height:6px;'></div><div>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div></td>
@@ -854,10 +978,10 @@ const BillGenerator = () => {
           </tr>
         <tr>
                       <td style="border: 1px solid #000; text-align: center; padding: 3px; font-size:9px;">1</td>
-            <td style="border: 1px solid #000; vertical-align: top; padding: 6px; font-size:9px;">
-              <strong>${extractedData.manufacturer} ${extractedData.assetCategory}</strong><br><br>
-              <strong>Model No:</strong> ${extractedData.model}<br>
-              ${serialToDisplay ? `<b>Serial Number:</b> ${serialToDisplay}<br>` : ''}
+            <td style="border: 1px solid #000; vertical-align: top; padding: 6px; font-size:9px; word-wrap: break-word; overflow-wrap: break-word;">
+              <strong style="word-wrap: break-word; overflow-wrap: break-word; display: block;">${extractedData.manufacturer} ${extractedData.assetCategory}</strong><br><br>
+              <strong>Model No:</strong> <span style="word-wrap: break-word; overflow-wrap: break-word;">${extractedData.model}</span><br>
+              ${serialToDisplay ? `<b>Serial Number:</b> <span style="word-wrap: break-word; overflow-wrap: break-word;">${serialToDisplay}</span><br>` : ''}
               <div style="display: flex; justify-content: space-between; margin-top: 6px;">
                 <div><strong>CGST</strong></div>
                 <div>${formatAmount(Number(taxDetails.cgst))}</div>
@@ -929,6 +1053,8 @@ const BillGenerator = () => {
       </table>
       ${extractedData.hdbFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY HDBFS</td></tr>` : ''}
       ${extractedData.tvsFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY TVS CREDIT</td></tr>` : ''}
+      ${extractedData.bajajFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY BAJAJ FINSERV</td></tr>` : ''}
+      ${extractedData.poonawallaFinance ? `<tr><td colspan="6" style="font-weight:bold; text-align:center; color:#1a237e; font-size:10px;">FINANCE BY POONAWALLA FINCORP</td></tr>` : ''}
       <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 4px;">
         <tr>
           <td style="border: 1px solid #000; width: 50%; vertical-align: top; padding: 4px; font-size:8px;">
@@ -1053,18 +1179,87 @@ const BillGenerator = () => {
 
         {extractedData && (
           <div>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Calculator style={{ width: 24, height: 24 }} />
-              Extracted Information
+              Extracted Information (Editable)
             </h2>
+            <p style={{ fontSize: '0.9rem', color: '#6b7280', marginBottom: 16, marginTop: 0 }}>
+              ✏️ Review and edit the extracted information below before generating the bill
+            </p>
             <div className="info-card">
-              <div><strong>Customer Name:</strong> {extractedData.customerName}</div>
-              {/* Manufacturer field hidden */}
-              <div className="full"><strong>Customer Address:</strong> {extractedData.customerAddress}</div>
-              <div><strong>Model:</strong> {extractedData.model}</div>
-              <div><strong>Serial Number:</strong> {extractedData.imeiSerialNumber}</div>
-              <div><strong>Asset Cost:</strong> ₹{extractedData.assetCost.toFixed(2)}</div>
-              <div><strong>Asset Category:</strong> {extractedData.assetCategory || 'Unknown'}</div>
+              <div>
+                <label className="input-label">Customer Name</label>
+                <input
+                  type="text"
+                  value={extractedData.customerName}
+                  onChange={(e) => setExtractedData(prev => ({ ...prev, customerName: e.target.value }))}
+                  className="input-box"
+                  placeholder="Enter customer name"
+                />
+              </div>
+              <div>
+                <label className="input-label">Manufacturer</label>
+                <input
+                  type="text"
+                  value={extractedData.manufacturer}
+                  onChange={(e) => setExtractedData(prev => ({ ...prev, manufacturer: e.target.value }))}
+                  className="input-box"
+                  placeholder="Enter manufacturer"
+                />
+              </div>
+              <div className="full">
+                <label className="input-label">Customer Address</label>
+                <textarea
+                  value={extractedData.customerAddress}
+                  onChange={(e) => setExtractedData(prev => ({ ...prev, customerAddress: e.target.value }))}
+                  className="input-box"
+                  placeholder="Enter customer address"
+                  rows="3"
+                  style={{ resize: 'vertical' }}
+                />
+              </div>
+              <div>
+                <label className="input-label">Model</label>
+                <input
+                  type="text"
+                  value={extractedData.model}
+                  onChange={(e) => setExtractedData(prev => ({ ...prev, model: e.target.value }))}
+                  className="input-box"
+                  placeholder="Enter model"
+                />
+              </div>
+              <div>
+                <label className="input-label">Serial Number</label>
+                <input
+                  type="text"
+                  value={extractedData.imeiSerialNumber}
+                  onChange={(e) => setExtractedData(prev => ({ ...prev, imeiSerialNumber: e.target.value }))}
+                  className="input-box"
+                  placeholder="Enter serial number"
+                />
+              </div>
+              <div>
+                <label className="input-label">Asset Cost (₹)</label>
+                <input
+                  type="number"
+                  value={extractedData.assetCost}
+                  onChange={(e) => setExtractedData(prev => ({ ...prev, assetCost: parseFloat(e.target.value) || 0 }))}
+                  className="input-box"
+                  placeholder="Enter asset cost"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+              <div>
+                <label className="input-label">Asset Category</label>
+                <input
+                  type="text"
+                  value={extractedData.assetCategory || ''}
+                  onChange={(e) => setExtractedData(prev => ({ ...prev, assetCategory: e.target.value }))}
+                  className="input-box"
+                  placeholder="Enter asset category"
+                />
+              </div>
             </div>
 
             <div style={{ marginTop: 32 }}>

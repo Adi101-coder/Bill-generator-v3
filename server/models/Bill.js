@@ -65,6 +65,14 @@ const billSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  bajajFinance: {
+    type: Boolean,
+    default: false
+  },
+  poonawallaFinance: {
+    type: Boolean,
+    default: false
+  },
   originalPdfPath: {
     type: String,
     default: ''
@@ -101,12 +109,12 @@ const billSchema = new mongoose.Schema({
 });
 
 // Virtual for total amount
-billSchema.virtual('totalAmount').get(function() {
+billSchema.virtual('totalAmount').get(function () {
   return this.assetCost;
 });
 
 // Virtual for formatted date
-billSchema.virtual('formattedDate').get(function() {
+billSchema.virtual('formattedDate').get(function () {
   return this.createdAt.toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -121,7 +129,7 @@ billSchema.index({ assetCost: -1 });
 billSchema.index({ status: 1 });
 
 // Static method to get analytics
-billSchema.statics.getAnalytics = async function() {
+billSchema.statics.getAnalytics = async function () {
   const analytics = await this.aggregate([
     {
       $group: {
@@ -180,27 +188,27 @@ billSchema.statics.getAnalytics = async function() {
 };
 
 // Static method to get bills with pagination and filters
-billSchema.statics.getBillsWithFilters = async function(filters = {}, page = 1, limit = 10) {
+billSchema.statics.getBillsWithFilters = async function (filters = {}, page = 1, limit = 10) {
   const skip = (page - 1) * limit;
-  
+
   const query = {};
-  
+
   if (filters.customerName) {
     query.customerName = { $regex: filters.customerName, $options: 'i' };
   }
-  
+
   if (filters.manufacturer) {
     query.manufacturer = { $regex: filters.manufacturer, $options: 'i' };
   }
-  
+
   if (filters.assetCategory) {
     query.assetCategory = { $regex: filters.assetCategory, $options: 'i' };
   }
-  
+
   if (filters.status) {
     query.status = filters.status;
   }
-  
+
   if (filters.dateFrom || filters.dateTo) {
     query.createdAt = {};
     if (filters.dateFrom) {
