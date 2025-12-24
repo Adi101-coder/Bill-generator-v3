@@ -216,7 +216,10 @@ const BillGenerator = () => {
 
   const formatAmount = (num) => {
     if (typeof num !== 'number' || isNaN(num)) return '';
-    return num.toLocaleString('en-IN');
+    return num.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
   };
 
   const extractDataFromPDF = async (file) => {
@@ -663,35 +666,92 @@ const BillGenerator = () => {
         });
       } else if (isPoonawallaDoc) {
         console.log('🔍 POONAWALLA FINCORP DETECTED - Starting extraction...');
+        console.log('🔍 Complete PDF text length:', fullText.length);
         
-        // Poonawalla extraction logic (similar pattern to other finance companies)
-        const customerMatch = fullText.match(/Customer Name:?[ \t]*([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i);
-        customerName = customerMatch ? customerMatch[1].trim() : '';
-        customerName = customerName.replace(/\s+Customer$/, '').trim();
+        // 1. Customer Name Extraction
+        // Look for: "Customer Name : [NAME]"
+        const customerNameMatch = fullText.match(/Customer Name\s*:\s*(.+?)(?=\s*Mobile Number|$)/i);
+        if (customerNameMatch) {
+          customerName = customerNameMatch[1].trim();
+          console.log('🔍 Customer Name extracted:', customerName);
+        } else {
+          console.log('❌ Customer Name not found');
+        }
         
-        const manufacturerMatch = fullText.match(/Manufacturer:?[ \t]*([^ \t\n]+)/i);
-        manufacturer = manufacturerMatch ? manufacturerMatch[1].trim() : '';
+        // 2. Customer Address Extraction
+        // Look for: "Customer Delivery Address: [ADDRESS]" (skip mobile number line)
+        const addressMatch = fullText.match(/Customer Delivery Address\s*:\s*(.+?)(?=\s*Product Brand|$)/is);
+        if (addressMatch) {
+          customerAddress = addressMatch[1].trim();
+          // Clean up the address - remove extra whitespace
+          customerAddress = customerAddress.replace(/\s+/g, ' ').trim();
+          console.log('🔍 Customer Address extracted:', customerAddress);
+        } else {
+          console.log('❌ Customer Address not found');
+        }
         
-        const addressMatch = fullText.match(/(?:Customer )?Address:?[ \t]*([\s\S]*?\d{6})/i);
-        customerAddress = addressMatch ? addressMatch[1].trim() : '';
-        customerAddress = customerAddress.replace(/^(?:Customer )?Address:?[ \t]*(.*)$/i, '$1').trim();
+        // 3. Manufacturer (Product Brand) Extraction
+        // Look for: "Product Brand : [BRAND]"
+        const manufacturerMatch = fullText.match(/Product Brand\s*:\s*(.+?)(?=\s*Product Catg|$)/i);
+        if (manufacturerMatch) {
+          manufacturer = manufacturerMatch[1].trim();
+          console.log('🔍 Manufacturer (Product Brand) extracted:', manufacturer);
+        } else {
+          console.log('❌ Manufacturer not found');
+        }
         
-        const rawAssetCategoryMatch = fullText.match(/Asset Category:?[ \t]*([A-Za-z\s]+?)(?=\s*(?:Sub-Category|Variant|\bModel\b|\bSerial Number\b|\bAsset Cost\b|$))/i);
-        assetCategory = rawAssetCategoryMatch ? rawAssetCategoryMatch[1].trim() : '';
-        if (assetCategory.endsWith('D')) assetCategory = assetCategory.slice(0, -1).trim();
+        // 4. Asset Category Extraction
+        // Look for: "Product Catg & Make : [CATEGORY]"
+        const assetCategoryMatch = fullText.match(/Product Catg & Make\s*:\s*(.+?)(?=\s*Product Model|Product IMEI|$)/i);
+        if (assetCategoryMatch) {
+          assetCategory = assetCategoryMatch[1].trim();
+          console.log('🔍 Asset Category extracted:', assetCategory);
+        } else {
+          console.log('❌ Asset Category not found');
+        }
         
-        const modelMatch = fullText.match(/Model:?\s*([^\n\r]+?)(?=\s*Asset Category|\n|\r)/i);
-        model = modelMatch ? modelMatch[1].trim() : '';
+        // 5. Model Extraction (if available)
+        // Look for: "Product Model : [MODEL]"
+        const modelMatch = fullText.match(/Product Model\s*:\s*(.+?)(?=\s*Product IMEI|Scheme|$)/i);
+        if (modelMatch) {
+          model = modelMatch[1].trim();
+          console.log('🔍 Model extracted:', model);
+        } else {
+          // If no model found, use a placeholder
+          model = 'Not Specified';
+          console.log('🔍 Model not found, using placeholder');
+        }
         
-        const serialNumberMatch = fullText.match(/Serial Number:?[ \t]*([^ \t\n]+)/i);
-        serialNumber = serialNumberMatch ? serialNumberMatch[1].trim() : '';
+        // 6. Serial Number Extraction
+        // Look for: "Product IMEI/Serial Number : [SERIAL]"
+        const serialNumberMatch = fullText.match(/Product IMEI\/Serial Number\s*:\s*(.+?)(?=\s*Scheme|$)/i);
+        if (serialNumberMatch) {
+          serialNumber = serialNumberMatch[1].trim();
+          console.log('🔍 Serial Number extracted:', serialNumber);
+        } else {
+          console.log('❌ Serial Number not found');
+        }
         
-        const assetCostMatch = fullText.match(/(?:Asset Cost|Product Cost)[^\d]*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/i);
-        if (assetCostMatch) {
-          assetCost = parseFloat(assetCostMatch[1].replace(/[^0-9.]/g, ''));
+        // 7. Asset Cost Extraction (from Page 2)
+        // Look for: "Product Cost (As per Invoice)" in the table
+        const productCostMatch = fullText.match(/(?:A\.\s*)?Product Cost\s*\(As per Invoice\)\s*[\s\S]*?(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/i);
+        if (productCostMatch) {
+          assetCost = parseFloat(productCostMatch[1].replace(/[^0-9.]/g, ''));
+          console.log('🔍 Product Cost extracted:', assetCost);
+        } else {
+          console.log('❌ Product Cost not found');
         }
         
         console.log('🔍 POONAWALLA FINCORP EXTRACTION COMPLETE');
+        console.log('🔍 Final extracted data:', {
+          customerName,
+          customerAddress,
+          manufacturer,
+          assetCategory,
+          model,
+          serialNumber,
+          assetCost
+        });
       } else {
         const customerMatch = fullText.match(/Customer Name:?[ \t]*([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i);
         customerName = customerMatch ? customerMatch[1].trim() : '';

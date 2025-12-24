@@ -82,7 +82,10 @@ const numberToWords = (amount) => {
 
 const formatAmount = (num) => {
   if (typeof num !== 'number' || isNaN(num)) return '';
-  return num.toLocaleString('en-IN');
+  return num.toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 };
 
 const calculateTaxDetails = (assetCost, assetCategory) => {
